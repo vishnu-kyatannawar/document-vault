@@ -1,0 +1,53 @@
+.topbar-avatar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--ion-color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.profile-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  min-width: 200px;
+}
+.profile-pop small {
+  color: var(--ion-color-step-500);
+}
+.profile-pop ion-button {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.docs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.docs-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18vh 24px 0;
+  text-align: center;
+}
+
+.docs-empty ion-icon {
+  font-size: 56px;
+  color: var(--ion-color-step-200);
+}
+.docs-empty h2 {
+  margin: 8px 0 0;
+}
+.docs-empty p {
+  margin: 0;
+  color: var(--ion-color-step-500);
+}

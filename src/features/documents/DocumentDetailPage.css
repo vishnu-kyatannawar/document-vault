@@ -1,0 +1,101 @@
+.detail-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.detail__viewer {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  height: 100%;
+  scrollbar-width: none;
+}
+.detail__viewer::-webkit-scrollbar {
+  display: none;
+}
+
+.detail__slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  height: 100%;
+}
+
+.part-viewer,
+.part-viewer__msg {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.part-viewer__img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.part-viewer--pdf {
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+.part-viewer__pdf {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+}
+.part-viewer__open {
+  align-self: center;
+}
+
+.detail__dots {
+  position: absolute;
+  bottom: 58px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.detail__dots button {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ion-color-step-200);
+}
+.detail__dots button.active {
+  background: var(--ion-color-primary);
+  width: 22px;
+  border-radius: 4px;
+}
+
+.detail__label {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-color-step-750);
+}
+
+.detail__actions {
+  --background: var(--ion-toolbar-background);
+}
+.detail__actionbar {
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+}
+.detail__actionbar ion-button {
+  font-size: 13px;
+}
