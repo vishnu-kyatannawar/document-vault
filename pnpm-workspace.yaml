@@ -1,2 +1,9 @@
+# Single-package repo. The `packages` field must be present so pnpm's
+# workspace-aware commands (e.g. `pnpm store path`, used by setup-node's cache)
+# don't fail with "packages field missing or empty" on CI.
+packages:
+  - .
+
+# Approve build scripts pnpm would otherwise skip (esbuild ships a native binary).
 allowBuilds:
   esbuild: true
