@@ -31,7 +31,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ status: 'signing-in', error: null });
     try {
       const grant = await requestAccessToken(true);
-      const profile = await fetchProfile(grant.accessToken);
+      // Auth succeeds as soon as we have a token. The profile is cosmetic, so a
+      // failed userinfo call must NOT block sign-in.
+      let profile = null;
+      try {
+        profile = await fetchProfile(grant.accessToken);
+      } catch {
+        profile = { email: '', name: 'Signed in', picture: '' };
+      }
       set({ grant, profile, status: 'authenticated' });
     } catch (e) {
       set({ status: 'error', error: (e as Error).message });
