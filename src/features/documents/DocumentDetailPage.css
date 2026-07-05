@@ -35,7 +35,10 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  border-radius: 12px;
+  border-radius: 14px;
+  border: var(--app-hairline);
+  box-shadow: var(--app-shadow-md);
+  background: #fff;
 }
 
 .part-viewer--pdf {
@@ -89,7 +92,10 @@
 }
 
 .detail__actions {
-  --background: var(--ion-toolbar-background);
+  --background: #ffffff;
+  --border-width: 1px 0 0 0;
+  --border-color: var(--ion-border-color);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .detail__actionbar {
   display: flex;

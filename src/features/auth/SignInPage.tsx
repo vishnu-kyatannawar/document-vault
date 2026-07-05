@@ -56,6 +56,10 @@ export default function SignInPage() {
               {error}
             </IonText>
           )}
+
+          <p className="signin__legal">
+            We only request access to files this app creates in your Drive.
+          </p>
         </div>
       </IonContent>
     </IonPage>

@@ -1,50 +1,121 @@
-/* Ionic theme — dark-first, modern deep-navy palette. */
+/* ============================================================================
+   Document Vault — "Warm Minimal" light theme
+   Premium, calm, high-readability. Warm off-white surfaces, ink text,
+   a single confident emerald accent used sparingly.
+   ============================================================================ */
+
 :root {
-  --ion-color-primary: #4f8cff;
-  --ion-color-primary-rgb: 79, 140, 255;
+  color-scheme: light;
+
+  /* Brand accent — emerald */
+  --ion-color-primary: #0e9f6e;
+  --ion-color-primary-rgb: 14, 159, 110;
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #457be0;
-  --ion-color-primary-tint: #6198ff;
+  --ion-color-primary-shade: #0c8b60;
+  --ion-color-primary-tint: #26aa7d;
 
-  --ion-color-success: #2dd4a7;
-  --ion-color-warning: #ffb020;
-  --ion-color-danger: #ff5d6c;
+  --ion-color-success: #0e9f6e;
+  --ion-color-warning: #d9930b;
+  --ion-color-danger: #e5484d;
+  --ion-color-danger-rgb: 229, 72, 77;
 
-  --app-radius: 18px;
+  /* Neutral surfaces (warm) */
+  --ion-background-color: #f7f6f3;
+  --ion-background-color-rgb: 247, 246, 243;
+  --ion-text-color: #1a1a17;
+  --ion-text-color-rgb: 26, 26, 23;
+
+  --ion-toolbar-background: rgba(247, 246, 243, 0.72);
+  --ion-item-background: #ffffff;
+  --ion-card-background: #ffffff;
+
+  --ion-color-medium: #6b6862;
+  --ion-border-color: rgba(26, 26, 23, 0.08);
+
+  /* Step scale: 0 ≈ background, 900 ≈ ink text (light mode → higher = darker) */
+  --ion-color-step-50: #f1f0ec;
+  --ion-color-step-100: #eae8e3;
+  --ion-color-step-150: #e2e0d9;
+  --ion-color-step-200: #d9d6ce;
+  --ion-color-step-250: #cfccc3;
+  --ion-color-step-300: #c4c0b6;
+  --ion-color-step-400: #a8a49a;
+  --ion-color-step-500: #6b6862;
+  --ion-color-step-600: #575450;
+  --ion-color-step-700: #423f3b;
+  --ion-color-step-750: #3a3733;
+  --ion-color-step-800: #2f2c29;
+  --ion-color-step-850: #272521;
+  --ion-color-step-900: #1f1e1b;
+
+  /* Design tokens */
+  --app-accent: #0e9f6e;
+  --app-accent-soft: #eafaf2;
+  --app-radius-lg: 22px;
+  --app-radius-md: 16px;
+  --app-radius-sm: 12px;
+  --app-hairline: 1px solid var(--ion-border-color);
+  --app-shadow-sm: 0 1px 2px rgba(26, 26, 23, 0.05);
+  --app-shadow-md: 0 2px 6px rgba(26, 26, 23, 0.05), 0 12px 28px rgba(26, 26, 23, 0.06);
+  --app-shadow-lg: 0 8px 40px rgba(26, 26, 23, 0.1);
+
+  --ion-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui,
+    'Helvetica Neue', Arial, sans-serif;
 }
 
-/* Force the app into its own dark theme regardless of system for a consistent look. */
-:root {
-  --ion-background-color: #0b1220;
-  --ion-background-color-rgb: 11, 18, 32;
-  --ion-text-color: #e7ecf5;
-  --ion-text-color-rgb: 231, 236, 245;
-
-  --ion-toolbar-background: #0f1830;
-  --ion-item-background: #131d36;
-  --ion-card-background: #131d36;
-
-  --ion-color-step-50: #16203a;
-  --ion-color-step-100: #1a2540;
-  --ion-color-step-150: #1f2b48;
-  --ion-color-step-200: #24314f;
-  --ion-color-step-500: #6b7793;
-  --ion-color-step-750: #aab3c7;
-  --ion-color-step-850: #c9d1e0;
-  --ion-color-step-900: #dbe1ec;
+body {
+  background: var(--ion-background-color);
 }
 
+/* Very subtle warm depth on scroll surfaces. */
 ion-content {
-  --background: radial-gradient(
-      1200px 600px at 100% -10%,
-      rgba(79, 140, 255, 0.18),
-      transparent 60%
-    ),
+  --background:
+    radial-gradient(120% 80% at 100% 0%, rgba(14, 159, 110, 0.06), transparent 55%),
     var(--ion-background-color);
 }
 
+/* Frosted, hairline-bordered toolbars for a modern app-shell feel. */
+ion-header ion-toolbar {
+  --border-width: 0 0 1px 0;
+  --border-color: var(--ion-border-color);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+ion-title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Cards: crisp hairline + soft layered shadow instead of heavy dark glow. */
 ion-card {
-  border-radius: var(--app-radius);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  border-radius: var(--app-radius-lg);
+  border: var(--app-hairline);
+  box-shadow: var(--app-shadow-md);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+ion-card[button]:active {
+  transform: scale(0.98);
+}
+
+/* Buttons: rounded, confident, with a soft accent shadow on primary. */
+ion-button {
+  --border-radius: var(--app-radius-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+ion-fab-button {
+  --box-shadow: 0 8px 22px rgba(14, 159, 110, 0.35);
+}
+
+ion-searchbar {
+  --border-radius: 14px !important;
+  --box-shadow: none !important;
+  --background: #ffffff !important;
+  padding-inline: 12px;
+}
+.searchbar-input.sc-ion-searchbar-ios {
+  border: var(--app-hairline);
 }

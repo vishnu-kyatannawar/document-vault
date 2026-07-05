@@ -108,7 +108,9 @@ export default function DocumentsPage() {
 
         {!loading && filtered.length === 0 && !error && (
           <div className="docs-center docs-empty">
-            <IonIcon icon={documentsOutline} />
+            <div className="docs-empty__badge">
+              <IonIcon icon={documentsOutline} />
+            </div>
             <h2>No documents yet</h2>
             <p>Tap the + button to add your first document.</p>
           </div>
