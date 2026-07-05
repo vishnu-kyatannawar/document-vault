@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
-import { IonApp, IonRouterOutlet } from '@ionic/react';
+import { IonApp, IonRouterOutlet, IonSpinner } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { Redirect, Route } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
-import { loadGis } from './auth/googleAuth';
 import SignInPage from './features/auth/SignInPage';
 import DocumentsPage from './features/documents/DocumentsPage';
 import DocumentDetailPage from './features/documents/DocumentDetailPage';
@@ -14,13 +13,14 @@ import NotConfiguredPage from './features/auth/NotConfiguredPage';
 const BASENAME = '/document-vault';
 
 export default function App() {
-  const authenticated = useAuthStore((s) => s.status === 'authenticated');
+  const status = useAuthStore((s) => s.status);
+  const restore = useAuthStore((s) => s.restore);
 
-  // Warm up Google Identity Services early so the sign-in tap opens the popup
-  // without waiting on a script download.
+  // On load, silently restore the session (no popup) so a refresh doesn't force
+  // a fresh Google sign-in when the user still has an active Google session.
   useEffect(() => {
-    if (isConfigured()) loadGis().catch(() => undefined);
-  }, []);
+    if (isConfigured()) restore();
+  }, [restore]);
 
   // Render sign-in / setup screens OUTSIDE the router. Mounting conditional
   // routes inside a single IonRouterOutlet stops it from swapping views when
@@ -33,7 +33,17 @@ export default function App() {
     );
   }
 
-  if (!authenticated) {
+  if (status === 'restoring') {
+    return (
+      <IonApp>
+        <div className="app-splash">
+          <IonSpinner name="crescent" />
+        </div>
+      </IonApp>
+    );
+  }
+
+  if (status !== 'authenticated') {
     return (
       <IonApp>
         <SignInPage />

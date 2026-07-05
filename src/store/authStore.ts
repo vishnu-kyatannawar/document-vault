@@ -7,7 +7,16 @@ import {
   revokeToken,
 } from '../auth/googleAuth';
 
-type AuthStatus = 'idle' | 'signing-in' | 'authenticated' | 'error';
+type AuthStatus = 'restoring' | 'idle' | 'signing-in' | 'authenticated' | 'error';
+
+async function loadProfile(accessToken: string): Promise<GoogleProfile> {
+  // The profile is cosmetic — never let a failed userinfo call block sign-in.
+  try {
+    return await fetchProfile(accessToken);
+  } catch {
+    return { email: '', name: 'Signed in', picture: '' };
+  }
+}
 
 interface AuthState {
   status: AuthStatus;
@@ -15,6 +24,8 @@ interface AuthState {
   error: string | null;
   // Token kept in memory only — never persisted to storage.
   grant: AccessGrant | null;
+  /** Silently restore a session on app load (no popup, no re-login). */
+  restore: () => Promise<void>;
   signIn: () => Promise<void>;
   signOut: () => void;
   /** Returns a currently-valid access token, silently refreshing if needed. */
@@ -22,23 +33,30 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  status: 'idle',
+  // Start in 'restoring' so the app shows a splash instead of flashing the
+  // sign-in screen before the silent token attempt resolves.
+  status: 'restoring',
   profile: null,
   error: null,
   grant: null,
+
+  restore: async () => {
+    set({ status: 'restoring', error: null });
+    try {
+      const grant = await requestAccessToken(false); // prompt: 'none'
+      const profile = await loadProfile(grant.accessToken);
+      set({ grant, profile, status: 'authenticated' });
+    } catch {
+      // No active Google session / consent → user must sign in interactively.
+      set({ status: 'idle' });
+    }
+  },
 
   signIn: async () => {
     set({ status: 'signing-in', error: null });
     try {
       const grant = await requestAccessToken(true);
-      // Auth succeeds as soon as we have a token. The profile is cosmetic, so a
-      // failed userinfo call must NOT block sign-in.
-      let profile = null;
-      try {
-        profile = await fetchProfile(grant.accessToken);
-      } catch {
-        profile = { email: '', name: 'Signed in', picture: '' };
-      }
+      const profile = await loadProfile(grant.accessToken);
       set({ grant, profile, status: 'authenticated' });
     } catch (e) {
       set({ status: 'error', error: (e as Error).message });

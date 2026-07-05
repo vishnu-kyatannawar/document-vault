@@ -68,6 +68,19 @@ body {
   background: var(--ion-background-color);
 }
 
+.app-splash {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--ion-background-color);
+}
+.app-splash ion-spinner {
+  --color: var(--app-accent);
+  width: 34px;
+  height: 34px;
+}
+
 /* Very subtle warm depth on scroll surfaces. */
 ion-content {
   --background:
