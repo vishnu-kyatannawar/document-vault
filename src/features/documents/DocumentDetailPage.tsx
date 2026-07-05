@@ -172,23 +172,25 @@ export default function DocumentDetailPage({ match, history }: Props) {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent fullscreen className="detail">
-        {doc.parts.length > 1 && (
-          <div className="detail__tabs">
-            {doc.parts.map((p, i) => (
-              <button
-                key={p.id}
-                className={`detail__tab ${i === safeActive ? 'active' : ''}`}
-                onClick={() => setActive(i)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
+      <IonContent fullscreen scrollY={false} className="detail">
+        <div className="detail__layout">
+          {doc.parts.length > 1 && (
+            <div className="detail__tabs">
+              {doc.parts.map((p, i) => (
+                <button
+                  key={p.id}
+                  className={`detail__tab ${i === safeActive ? 'active' : ''}`}
+                  onClick={() => setActive(i)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
 
-        <div className="detail__stage">
-          {part && <PartViewer key={part.id} part={part} />}
+          <div className="detail__stage">
+            {part && <PartViewer key={part.id} part={part} />}
+          </div>
         </div>
       </IonContent>
 

@@ -8,6 +8,12 @@
 .detail {
   --padding-top: 0;
   --padding-bottom: 0;
+}
+
+/* Real full-height flex container (IonContent slots children into shadow DOM,
+   so flex must live on our own wrapper, not on ion-content). */
+.detail__layout {
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
