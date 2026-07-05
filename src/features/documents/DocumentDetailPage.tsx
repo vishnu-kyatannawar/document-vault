@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   IonBackButton,
   IonButton,
@@ -40,7 +40,6 @@ export default function DocumentDetailPage({ match, history }: Props) {
   const doc = useMemo(() => items.find((d) => d.id === id), [items, id]);
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState(false);
-  const scroller = useRef<HTMLDivElement>(null);
   const [presentActionSheet] = useIonActionSheet();
   const [presentToast] = useIonToast();
 
@@ -59,7 +58,8 @@ export default function DocumentDetailPage({ match, history }: Props) {
     );
   }
 
-  const part: DocumentPart | undefined = doc.parts[active];
+  const safeActive = Math.min(active, doc.parts.length - 1);
+  const part: DocumentPart | undefined = doc.parts[safeActive];
 
   const withBlob = async (p: DocumentPart) => ({
     filename: p.name,
@@ -83,10 +83,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
     try {
       const result = await shareFile(await withBlob(part), `${doc.title} — ${part.label}`);
       if (result === 'fallback') {
-        presentToast({
-          message: 'File downloaded — attach it in WhatsApp.',
-          duration: 2500,
-        });
+        presentToast({ message: 'File downloaded — attach it in WhatsApp.', duration: 2500 });
       }
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
@@ -104,11 +101,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
       setBusy(true);
       try {
         const label = `Page ${doc.parts.length + 1}`;
-        await addPart(doc.id, {
-          label,
-          filename: suggestFilename(label, file),
-          blob: file,
-        });
+        await addPart(doc.id, { label, filename: suggestFilename(label, file), blob: file });
         setActive(doc.parts.length);
       } finally {
         setBusy(false);
@@ -163,12 +156,6 @@ export default function DocumentDetailPage({ match, history }: Props) {
       ],
     });
 
-  const onScroll = () => {
-    const el = scroller.current;
-    if (!el) return;
-    setActive(Math.round(el.scrollLeft / el.clientWidth));
-  };
-
   return (
     <IonPage>
       <IonHeader translucent>
@@ -186,44 +173,40 @@ export default function DocumentDetailPage({ match, history }: Props) {
       </IonHeader>
 
       <IonContent fullscreen className="detail">
-        <div className="detail__viewer" ref={scroller} onScroll={onScroll}>
-          {doc.parts.map((p) => (
-            <div className="detail__slide" key={p.id}>
-              <PartViewer part={p} />
-            </div>
-          ))}
-        </div>
-
         {doc.parts.length > 1 && (
-          <div className="detail__dots">
+          <div className="detail__tabs">
             {doc.parts.map((p, i) => (
               <button
                 key={p.id}
-                className={i === active ? 'active' : ''}
-                aria-label={p.label}
-                onClick={() => {
-                  scroller.current?.scrollTo({ left: i * scroller.current.clientWidth });
-                }}
-              />
+                className={`detail__tab ${i === safeActive ? 'active' : ''}`}
+                onClick={() => setActive(i)}
+              >
+                {p.label}
+              </button>
             ))}
           </div>
         )}
 
-        {part && <div className="detail__label">{part.label}</div>}
+        <div className="detail__stage">
+          {part && <PartViewer key={part.id} part={part} />}
+        </div>
       </IonContent>
 
       <IonToolbar className="detail__actions">
-        <IonButtons className="detail__actionbar">
-          <IonButton onClick={onDownload} disabled={busy}>
-            <IonIcon slot="start" icon={downloadOutline} /> Download
-          </IonButton>
-          <IonButton onClick={onShare} disabled={busy}>
-            <IonIcon slot="start" icon={shareSocialOutline} /> Share
-          </IonButton>
-          <IonButton onClick={onDeletePart} disabled={busy} color="danger">
-            <IonIcon slot="start" icon={trashOutline} /> Delete
-          </IonButton>
-        </IonButtons>
+        <div className="detail__actionbar">
+          <button onClick={onDownload} disabled={busy}>
+            <IonIcon icon={downloadOutline} />
+            <span>Download</span>
+          </button>
+          <button onClick={onShare} disabled={busy}>
+            <IonIcon icon={shareSocialOutline} />
+            <span>Share</span>
+          </button>
+          <button className="danger" onClick={onDeletePart} disabled={busy}>
+            <IonIcon icon={trashOutline} />
+            <span>Delete</span>
+          </button>
+        </div>
       </IonToolbar>
     </IonPage>
   );

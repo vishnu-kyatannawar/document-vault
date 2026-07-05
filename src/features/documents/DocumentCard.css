@@ -31,6 +31,12 @@
   opacity: 0.55;
 }
 
+.doc-card__spin {
+  --color: var(--app-accent);
+  width: 26px;
+  height: 26px;
+}
+
 .doc-card__badge {
   position: absolute;
   top: 8px;

@@ -19,7 +19,7 @@ import {
   IonToolbar,
   RefresherCustomEvent,
 } from '@ionic/react';
-import { add, documentsOutline, logOutOutline } from 'ionicons/icons';
+import { add, documentsOutline, logOutOutline, shieldCheckmark } from 'ionicons/icons';
 import { useAuthStore } from '../../store/authStore';
 import { useDocumentsStore } from '../../store/documentsStore';
 import DocumentCard from './DocumentCard';
@@ -56,7 +56,14 @@ export default function DocumentsPage() {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonTitle>Documents</IonTitle>
+          <IonTitle>
+            <span className="app-title">
+              <span className="app-title__badge">
+                <IonIcon icon={shieldCheckmark} />
+              </span>
+              Your Documents
+            </span>
+          </IonTitle>
           <IonButtons slot="end">
             <IonButton id="profile-trigger">
               <IonAvatar className="topbar-avatar">
@@ -79,11 +86,14 @@ export default function DocumentsPage() {
             </IonPopover>
           </IonButtons>
         </IonToolbar>
-        <IonToolbar>
+        <IonToolbar className="search-toolbar">
           <IonSearchbar
+            className="app-search"
             value={search}
             onIonInput={(e) => setSearch(e.detail.value ?? '')}
-            placeholder="Search documents"
+            placeholder="Search by name or category"
+            inputmode="search"
+            showClearButton="focus"
             debounce={150}
           />
         </IonToolbar>

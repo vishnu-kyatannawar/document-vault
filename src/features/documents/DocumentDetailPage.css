@@ -5,92 +5,53 @@
   height: 100%;
 }
 
-.detail__viewer {
+.detail {
+  --padding-top: 0;
+  --padding-bottom: 0;
   display: flex;
+  flex-direction: column;
+}
+
+/* Part selector (Front / Back / Page N) */
+.detail__tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
   overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  height: 100%;
   scrollbar-width: none;
 }
-.detail__viewer::-webkit-scrollbar {
+.detail__tabs::-webkit-scrollbar {
   display: none;
 }
-
-.detail__slide {
-  flex: 0 0 100%;
-  scroll-snap-align: start;
-  height: 100%;
-}
-
-.part-viewer,
-.part-viewer__msg {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-}
-
-.part-viewer__img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 14px;
+.detail__tab {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border-radius: 999px;
   border: var(--app-hairline);
-  box-shadow: var(--app-shadow-md);
-  background: #fff;
-}
-
-.part-viewer--pdf {
-  flex-direction: column;
-  gap: 12px;
-  align-items: stretch;
-}
-.part-viewer__pdf {
-  flex: 1;
-  width: 100%;
-  border: 0;
-  border-radius: 12px;
-  background: #fff;
-}
-.part-viewer__open {
-  align-self: center;
-}
-
-.detail__dots {
-  position: absolute;
-  bottom: 58px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-}
-.detail__dots button {
-  width: 8px;
-  height: 8px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--ion-color-step-200);
-}
-.detail__dots button.active {
-  background: var(--ion-color-primary);
-  width: 22px;
-  border-radius: 4px;
-}
-
-.detail__label {
-  position: absolute;
-  bottom: 16px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 13px;
+  background: #ffffff;
+  color: var(--ion-color-step-600);
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--ion-color-step-750);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.detail__tab.active {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+  color: #fff;
 }
 
+.detail__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.detail__stage > * {
+  position: absolute;
+  inset: 0;
+}
+
+/* Bottom actions */
 .detail__actions {
   --background: #ffffff;
   --border-width: 1px 0 0 0;
@@ -101,7 +62,27 @@
   display: flex;
   justify-content: space-around;
   width: 100%;
+  padding: 4px 0;
 }
-.detail__actionbar ion-button {
-  font-size: 13px;
+.detail__actionbar button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--ion-color-step-700);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.detail__actionbar button ion-icon {
+  font-size: 22px;
+}
+.detail__actionbar button.danger {
+  color: var(--ion-color-danger);
+}
+.detail__actionbar button:disabled {
+  opacity: 0.4;
 }

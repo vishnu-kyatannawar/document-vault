@@ -1,0 +1,83 @@
+.pv {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  background: var(--ion-color-step-50);
+}
+
+.pv-wrap {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.pv-content {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pv-img {
+  max-width: 100vw;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.pv-pdf {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0;
+}
+.pv-pdf__page {
+  display: block;
+  border-radius: 8px;
+  box-shadow: var(--app-shadow-md);
+  background: #fff;
+}
+
+.pv-msg {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ion-color-step-500);
+  font-size: 14px;
+}
+.pv-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Floating zoom controls */
+.pv-controls {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: var(--app-hairline);
+  box-shadow: var(--app-shadow-md);
+  background: var(--ion-border-color);
+}
+.pv-controls button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: #ffffff;
+  color: var(--ion-text-color);
+  font-size: 20px;
+  cursor: pointer;
+}
+.pv-controls button:active {
+  background: var(--app-accent-soft);
+}

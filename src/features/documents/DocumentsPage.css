@@ -1,3 +1,52 @@
+/* Branded title */
+.app-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.app-title__badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--app-accent-soft);
+}
+.app-title__badge ion-icon {
+  font-size: 16px;
+  color: var(--app-accent);
+}
+
+/* Search */
+.search-toolbar {
+  --background: transparent;
+  padding: 2px 8px 10px;
+}
+.app-search {
+  --background: #ffffff;
+  --border-radius: 14px;
+  --box-shadow: none;
+  --color: var(--ion-text-color);
+  --placeholder-color: var(--ion-color-step-400);
+  --placeholder-opacity: 1;
+  --icon-color: var(--ion-color-step-400);
+  --clear-button-color: var(--ion-color-step-500);
+  padding: 0 6px;
+  min-height: 46px;
+}
+.app-search .searchbar-input.sc-ion-searchbar-ios {
+  border: var(--app-hairline);
+  box-shadow: var(--app-shadow-sm);
+  font-size: 15px;
+  font-weight: 500;
+  padding-inline-start: 40px;
+}
+.app-search .searchbar-search-icon.sc-ion-searchbar-ios {
+  inset-inline-start: 13px;
+}
+
 .topbar-avatar {
   width: 32px;
   height: 32px;

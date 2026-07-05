@@ -1,13 +1,14 @@
-import { IonCard, IonIcon } from '@ionic/react';
+import { IonCard, IonIcon, IonSpinner } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
 import { documentTextOutline, layersOutline } from 'ionicons/icons';
 import { VaultDocument } from '../../services/documentsService';
-import AuthedImage from '../../components/AuthedImage';
+import { useThumbnail } from '../../hooks/useThumbnail';
 import './DocumentCard.css';
 
 export default function DocumentCard({ doc }: { doc: VaultDocument }) {
   const history = useHistory();
-  const cover = doc.parts.find((p) => p.thumbnailLink);
+  const cover = doc.parts[0];
+  const { url, failed } = useThumbnail(cover);
 
   return (
     <IonCard
@@ -16,10 +17,12 @@ export default function DocumentCard({ doc }: { doc: VaultDocument }) {
       onClick={() => history.push(`/documents/${doc.id}`)}
     >
       <div className="doc-card__thumb">
-        {cover ? (
-          <AuthedImage src={cover.thumbnailLink} alt={doc.title} className="doc-card__img" />
-        ) : (
+        {url ? (
+          <img src={url} alt={doc.title} className="doc-card__img" />
+        ) : failed || !cover ? (
           <IonIcon icon={documentTextOutline} className="doc-card__icon" />
+        ) : (
+          <IonSpinner name="crescent" className="doc-card__spin" />
         )}
         {doc.parts.length > 1 && (
           <span className="doc-card__badge">
