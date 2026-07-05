@@ -72,9 +72,12 @@
   color: var(--ion-color-step-500);
 }
 .profile-pop ion-button {
-  margin-top: 10px;
+  margin-top: 2px;
   align-self: flex-start;
   --padding-start: 0;
+}
+.profile-pop ion-button:first-of-type {
+  margin-top: 10px;
 }
 
 .docs-grid {

@@ -6,6 +6,7 @@ import {
   requestAccessToken,
   revokeToken,
 } from '../auth/googleAuth';
+import { logger } from '../services/logger';
 
 type AuthStatus = 'restoring' | 'idle' | 'signing-in' | 'authenticated' | 'error';
 
@@ -85,6 +86,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (e) {
       const message = (e as Error).message;
       if (message === 'superseded') return; // a newer request took over
+      logger.error('Sign-in failed', e as Error);
       set({ status: 'error', error: friendlyAuthError(message) });
     }
   },
@@ -108,9 +110,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const fresh = await refreshPromise;
       set({ grant: fresh });
       return fresh.accessToken;
-    } catch {
+    } catch (e) {
       // Silent refresh impossible → the Google session is gone. Return the app
       // to the sign-in screen instead of leaving every Drive call failing.
+      logger.warn('Silent token refresh failed — signing out', e as Error);
       set({ status: 'idle', grant: null, profile: null });
       throw new Error('Session expired — please sign in again.');
     }

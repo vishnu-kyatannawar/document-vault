@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DocumentPart } from '../services/documentsService';
 import { getThumbnail } from '../services/thumbnails';
+import { logger } from '../services/logger';
 
 /** Loads a cached preview for a document part (or null while loading / on error). */
 export function useThumbnail(part?: DocumentPart): { url: string | null; failed: boolean } {
@@ -17,7 +18,10 @@ export function useThumbnail(part?: DocumentPart): { url: string | null; failed:
     }
     getThumbnail(part)
       .then((u) => active && setUrl(u))
-      .catch(() => active && setFailed(true));
+      .catch((e) => {
+        logger.error(`Thumbnail failed for "${part.name}" (${part.mimeType})`, e as Error);
+        if (active) setFailed(true);
+      });
     return () => {
       active = false;
     };

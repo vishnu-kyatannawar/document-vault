@@ -28,6 +28,7 @@ import { useDocumentsStore } from '../../store/documentsStore';
 import { documents as service } from '../../services/vault';
 import { DocumentPart } from '../../services/documentsService';
 import { downloadFile, shareFile } from '../share/share';
+import { logger } from '../../services/logger';
 import { CaptureSource, pickFiles, suggestFilename } from '../capture/capture';
 import PartViewer from './PartViewer';
 import './DocumentDetailPage.css';
@@ -69,6 +70,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
 
   const toastError = (prefix: string, e: unknown) => {
     if ((e as Error).name === 'AbortError') return; // user closed the share sheet
+    logger.error(prefix, e as Error);
     presentToast({ message: `${prefix}: ${(e as Error).message}`, duration: 3000 });
   };
 

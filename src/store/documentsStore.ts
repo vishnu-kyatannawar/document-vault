@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { NewPart, VaultDocument } from '../services/documentsService';
 import { documents as service } from '../services/vault';
+import { logger } from '../services/logger';
 
 interface DocumentsState {
   items: VaultDocument[];
@@ -24,6 +25,7 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
       const items = await service.listDocuments();
       set({ items, loading: false });
     } catch (e) {
+      logger.error('Documents load failed', e as Error);
       set({ loading: false, error: (e as Error).message });
     }
   },

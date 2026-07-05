@@ -18,7 +18,14 @@ import {
   IonToolbar,
   RefresherCustomEvent,
 } from '@ionic/react';
-import { add, documentsOutline, logOutOutline, shieldCheckmark } from 'ionicons/icons';
+import {
+  add,
+  bugOutline,
+  documentsOutline,
+  logOutOutline,
+  shieldCheckmark,
+} from 'ionicons/icons';
+import { downloadLogs } from '../../services/logger';
 import { useAuthStore } from '../../store/authStore';
 import { useDocumentsStore } from '../../store/documentsStore';
 import { resetLocalData } from '../../services/session';
@@ -83,6 +90,10 @@ export default function DocumentsPage() {
               <div className="profile-pop">
                 <strong>{profile?.name}</strong>
                 <small>{profile?.email}</small>
+                <IonButton fill="clear" size="small" onClick={() => downloadLogs()}>
+                  <IonIcon slot="start" icon={bugOutline} />
+                  Download logs
+                </IonButton>
                 <IonButton fill="clear" size="small" onClick={handleSignOut}>
                   <IonIcon slot="start" icon={logOutOutline} />
                   Sign out

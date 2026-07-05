@@ -4,6 +4,7 @@ import { addOutline, removeOutline, scanOutline } from 'ionicons/icons';
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch';
 import { DocumentPart } from '../../services/documentsService';
 import { documents as service } from '../../services/vault';
+import { logger } from '../../services/logger';
 import './PartViewer.css';
 
 /**
@@ -36,7 +37,10 @@ function PdfPages({
       if (cancelled) return;
       pdfRef.current = pdf;
       setDocReady(true);
-    })().catch(() => onReady());
+    })().catch((e) => {
+      logger.error('PDF parse failed', e as Error);
+      onReady();
+    });
     return () => {
       cancelled = true;
       pdfRef.current?.loadingTask.destroy().catch(() => undefined);
@@ -69,7 +73,10 @@ function PdfPages({
         else host.appendChild(canvas);
         if (i === 1) onReady();
       }
-    })().catch(() => onReady());
+    })().catch((e) => {
+      logger.error('PDF page render failed', e as Error);
+      onReady();
+    });
     return () => {
       cancelled = true;
     };
@@ -107,7 +114,10 @@ export default function PartViewer({ part }: { part: DocumentPart }) {
           setReady(true);
         }
       })
-      .catch((e) => active && setError((e as Error).message));
+      .catch((e) => {
+        logger.error('Part download failed', e as Error);
+        if (active) setError((e as Error).message);
+      });
 
     return () => {
       active = false;
