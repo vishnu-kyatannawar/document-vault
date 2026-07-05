@@ -7,9 +7,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export type PdfDoc = Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>;
 
-// Mobile Safari fails silently past ~16M canvas pixels; stay comfortably under.
-const MAX_CANVAS_WIDTH = 4096;
-const MAX_CANVAS_AREA = 14_000_000;
+// Safari (iOS and macOS) silently blanks canvases past ~16.7M pixels, so it
+// needs conservative caps. Chrome/Firefox/Android tolerate far larger, which
+// buys visibly sharper deep zoom there.
+const IS_SAFARI =
+  typeof navigator !== 'undefined' &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    /^((?!chrome|chromium|android).)*safari/i.test(navigator.userAgent));
+
+const MAX_CANVAS_WIDTH = IS_SAFARI ? 4096 : 8192;
+const MAX_CANVAS_AREA = IS_SAFARI ? 16_000_000 : 100_000_000;
 
 /** Parse a PDF from raw bytes. */
 export async function loadPdf(data: ArrayBuffer): Promise<PdfDoc> {
@@ -26,7 +33,7 @@ export async function renderPageToCanvas(
   pdf: PdfDoc,
   pageNumber: number,
   cssWidth: number,
-  quality: number = Math.min(window.devicePixelRatio || 1, 2),
+  quality: number = Math.min(window.devicePixelRatio || 1, 3),
 ): Promise<HTMLCanvasElement> {
   const page = await pdf.getPage(pageNumber);
   const base = page.getViewport({ scale: 1 });

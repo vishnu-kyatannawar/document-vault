@@ -47,7 +47,7 @@ function PdfPages({
   // Render pages; re-render sharper when the settled zoom outgrows the raster.
   useEffect(() => {
     if (!docReady) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const needed = Math.max(1, Math.min(zoom, 6)) * dpr;
     if (needed <= qualityRef.current * 1.25) return; // current raster is sharp enough
     qualityRef.current = needed;
