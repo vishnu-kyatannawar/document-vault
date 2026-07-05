@@ -13,7 +13,6 @@ import {
   IonRefresher,
   IonRefresherContent,
   IonSearchbar,
-  IonSpinner,
   IonText,
   IonTitle,
   IonToolbar,
@@ -22,6 +21,7 @@ import {
 import { add, documentsOutline, logOutOutline, shieldCheckmark } from 'ionicons/icons';
 import { useAuthStore } from '../../store/authStore';
 import { useDocumentsStore } from '../../store/documentsStore';
+import { resetLocalData } from '../../services/session';
 import DocumentCard from './DocumentCard';
 import AddDocumentSheet from '../capture/AddDocumentSheet';
 import './DocumentsPage.css';
@@ -32,6 +32,11 @@ export default function DocumentsPage() {
   const { items, loading, error, load } = useDocumentsStore();
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+
+  const handleSignOut = () => {
+    signOut();
+    void resetLocalData();
+  };
 
   useEffect(() => {
     if (items.length === 0) load();
@@ -78,7 +83,7 @@ export default function DocumentsPage() {
               <div className="profile-pop">
                 <strong>{profile?.name}</strong>
                 <small>{profile?.email}</small>
-                <IonButton fill="clear" size="small" onClick={signOut}>
+                <IonButton fill="clear" size="small" onClick={handleSignOut}>
                   <IonIcon slot="start" icon={logOutOutline} />
                   Sign out
                 </IonButton>
@@ -105,8 +110,10 @@ export default function DocumentsPage() {
         </IonRefresher>
 
         {loading && items.length === 0 && (
-          <div className="docs-center">
-            <IonSpinner name="crescent" />
+          <div className="docs-grid" aria-hidden="true">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div className="doc-skel" key={i} />
+            ))}
           </div>
         )}
 

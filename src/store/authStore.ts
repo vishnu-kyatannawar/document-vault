@@ -18,6 +18,21 @@ async function loadProfile(accessToken: string): Promise<GoogleProfile> {
   }
 }
 
+function friendlyAuthError(message: string): string {
+  if (/popup_closed|popup_failed_to_open/i.test(message)) {
+    return 'The sign-in window was closed. Please try again.';
+  }
+  if (/access_denied/i.test(message)) {
+    return 'Access was denied. Grant Drive access to continue.';
+  }
+  return message;
+}
+
+// One in-flight silent refresh shared by all callers — parallel Drive calls on
+// an expired token must not fire competing GIS requests (they supersede each
+// other and most would spuriously fail).
+let refreshPromise: Promise<AccessGrant> | null = null;
+
 interface AuthState {
   status: AuthStatus;
   profile: GoogleProfile | null;
@@ -30,6 +45,8 @@ interface AuthState {
   signOut: () => void;
   /** Returns a currently-valid access token, silently refreshing if needed. */
   getAccessToken: () => Promise<string>;
+  /** Drop the cached token (e.g. after a 401) so the next call fetches fresh. */
+  invalidateToken: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -53,8 +70,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const profile = await loadProfile(grant.accessToken);
       set({ grant, profile, status: 'authenticated' });
     } catch {
-      // No active Google session / consent → user must sign in interactively.
-      set({ status: 'idle' });
+      // Only fall back to sign-in if nothing else changed the state meanwhile
+      // (e.g. the user already tapped "Continue with Google", superseding us).
+      if (get().status === 'restoring') set({ status: 'idle' });
     }
   },
 
@@ -65,7 +83,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const profile = await loadProfile(grant.accessToken);
       set({ grant, profile, status: 'authenticated' });
     } catch (e) {
-      set({ status: 'error', error: (e as Error).message });
+      const message = (e as Error).message;
+      if (message === 'superseded') return; // a newer request took over
+      set({ status: 'error', error: friendlyAuthError(message) });
     }
   },
 
@@ -78,9 +98,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   getAccessToken: async () => {
     const { grant } = get();
     if (grant && grant.expiresAt > Date.now()) return grant.accessToken;
-    // Expired or missing → silent refresh.
-    const fresh = await requestAccessToken(false);
-    set({ grant: fresh });
-    return fresh.accessToken;
+
+    if (!refreshPromise) {
+      refreshPromise = requestAccessToken(false).finally(() => {
+        refreshPromise = null;
+      });
+    }
+    try {
+      const fresh = await refreshPromise;
+      set({ grant: fresh });
+      return fresh.accessToken;
+    } catch {
+      // Silent refresh impossible → the Google session is gone. Return the app
+      // to the sign-in screen instead of leaving every Drive call failing.
+      set({ status: 'idle', grant: null, profile: null });
+      throw new Error('Session expired — please sign in again.');
+    }
   },
+
+  invalidateToken: () => set({ grant: null }),
 }));

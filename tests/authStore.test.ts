@@ -65,4 +65,34 @@ describe('authStore', () => {
     expect(token).toBe('new');
     expect(requestAccessToken).toHaveBeenCalledWith(false);
   });
+
+  it('deduplicates concurrent silent refreshes into one GIS request', async () => {
+    useAuthStore.setState({
+      grant: { accessToken: 'old', expiresAt: Date.now() - 1000, scope: '' },
+    });
+    let release!: (g: unknown) => void;
+    requestAccessToken.mockReturnValue(new Promise((r) => (release = r)));
+
+    const p1 = useAuthStore.getState().getAccessToken();
+    const p2 = useAuthStore.getState().getAccessToken();
+    release({ accessToken: 'new', expiresAt: Date.now() + 3600_000, scope: '' });
+
+    expect(await p1).toBe('new');
+    expect(await p2).toBe('new');
+    expect(requestAccessToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns to the sign-in screen when a silent refresh fails', async () => {
+    useAuthStore.setState({
+      status: 'authenticated',
+      grant: { accessToken: 'old', expiresAt: Date.now() - 1000, scope: '' },
+    });
+    requestAccessToken.mockRejectedValue(new Error('no session'));
+
+    await expect(useAuthStore.getState().getAccessToken()).rejects.toThrow(
+      /sign in again/i,
+    );
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().grant).toBeNull();
+  });
 });

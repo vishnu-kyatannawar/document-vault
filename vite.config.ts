@@ -35,6 +35,13 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Ship updates without requiring the user to close every tab / hard
+        // reload: new SW activates immediately and takes over open clients.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        // SPA offline fallback for deep links within the app scope.
+        navigateFallback: `${BASE}index.html`,
         // Never cache Google auth or Drive API responses — always hit network.
         navigateFallbackDenylist: [/^\/document-vault\/api/],
         runtimeCaching: [

@@ -84,6 +84,31 @@
   padding: 16px;
 }
 
+/* Shimmering placeholders while the first load is in flight. */
+.doc-skel {
+  border-radius: var(--app-radius-lg);
+  border: var(--app-hairline);
+  aspect-ratio: 4 / 5;
+  background: linear-gradient(
+    100deg,
+    var(--ion-color-step-50) 40%,
+    #ffffff 50%,
+    var(--ion-color-step-50) 60%
+  );
+  background-size: 200% 100%;
+  animation: doc-skel-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes doc-skel-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-skel {
+    animation: none;
+  }
+}
+
 .docs-center {
   display: flex;
   flex-direction: column;

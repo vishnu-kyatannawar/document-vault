@@ -47,6 +47,19 @@
   color: #fff;
 }
 
+.detail__none {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.detail__none p {
+  margin: 0;
+  color: var(--ion-color-step-500);
+}
+
 .detail__stage {
   position: relative;
   flex: 1;

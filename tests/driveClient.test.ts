@@ -59,4 +59,33 @@ describe('driveClient', () => {
     const client = createDriveClient(getToken);
     await expect(client.deleteFile('x')).rejects.toThrow(/403/);
   });
+
+  it('drops the token and retries once on 401', async () => {
+    let calls = 0;
+    const fetchMock = vi.fn(async (..._args: unknown[]) => {
+      calls += 1;
+      const first = calls === 1;
+      return {
+        ok: !first,
+        status: first ? 401 : 200,
+        json: async () => ({ files: [] }),
+        text: async () => (first ? 'unauthorized' : ''),
+        blob: async () => new Blob(),
+      } as unknown as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onUnauthorized = vi.fn();
+
+    const client = createDriveClient(getToken, onUnauthorized);
+    await client.listFolders('root');
+
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('getFile returns null when the file no longer exists (404)', async () => {
+    mockFetch({ error: 'gone' }, false, 404);
+    const client = createDriveClient(getToken);
+    expect(await client.getFile('missing-id')).toBeNull();
+  });
 });

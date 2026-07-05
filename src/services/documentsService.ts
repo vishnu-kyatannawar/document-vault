@@ -34,6 +34,8 @@ export interface NewPart {
 
 export interface DocumentsService {
   ensureRoot(): Promise<string>;
+  /** Forget the cached root folder id (e.g. on sign-out / account switch). */
+  invalidateRoot(): void;
   listDocuments(): Promise<VaultDocument[]>;
   createDocument(title: string, category: string, parts: NewPart[]): Promise<VaultDocument>;
   addPart(documentId: string, part: NewPart): Promise<DocumentPart>;
@@ -57,7 +59,13 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
 
   async function resolveRoot(): Promise<string> {
     const cached = localStorage.getItem(ROOT_CACHE_KEY);
-    if (cached) return cached;
+    if (cached) {
+      // Verify once per session — the folder may have been trashed/deleted in
+      // Drive, and blindly trusting a stale id breaks every later call.
+      const file = await drive.getFile(cached);
+      if (file && !file.trashed) return cached;
+      localStorage.removeItem(ROOT_CACHE_KEY);
+    }
     const existing = await drive.findFolderByName(ROOT_FOLDER_NAME);
     const folder = existing ?? (await drive.createFolder(ROOT_FOLDER_NAME));
     localStorage.setItem(ROOT_CACHE_KEY, folder.id);
@@ -65,12 +73,23 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
   }
 
   function ensureRoot(): Promise<string> {
-    if (!rootIdPromise) rootIdPromise = resolveRoot();
+    if (!rootIdPromise) {
+      // Don't memoise failures — a transient error must not poison the session.
+      rootIdPromise = resolveRoot().catch((e) => {
+        rootIdPromise = null;
+        throw e;
+      });
+    }
     return rootIdPromise;
   }
 
   return {
     ensureRoot,
+
+    invalidateRoot() {
+      rootIdPromise = null;
+      localStorage.removeItem(ROOT_CACHE_KEY);
+    },
 
     async listDocuments() {
       const rootId = await ensureRoot();

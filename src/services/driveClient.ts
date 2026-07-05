@@ -12,6 +12,7 @@ export interface DriveFile {
   id: string;
   name: string;
   mimeType: string;
+  trashed?: boolean;
   thumbnailLink?: string;
   createdTime?: string;
   appProperties?: Record<string, string>;
@@ -19,6 +20,8 @@ export interface DriveFile {
 }
 
 export interface DriveClient {
+  /** Fetch a single file's metadata, or null if it no longer exists. */
+  getFile(id: string): Promise<DriveFile | null>;
   listFolders(parentId: string): Promise<DriveFile[]>;
   listChildren(parentId: string): Promise<DriveFile[]>;
   findFolderByName(name: string, parentId?: string): Promise<DriveFile | null>;
@@ -38,12 +41,24 @@ export interface DriveClient {
   deleteFile(id: string): Promise<void>;
 }
 
-export function createDriveClient(getToken: TokenProvider): DriveClient {
-  async function authed(url: string, init: RequestInit = {}): Promise<Response> {
+export function createDriveClient(
+  getToken: TokenProvider,
+  onUnauthorized?: () => void,
+): DriveClient {
+  async function authed(
+    url: string,
+    init: RequestInit = {},
+    allowRetry = true,
+  ): Promise<Response> {
     const token = await getToken();
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${token}`);
     const res = await fetch(url, { ...init, headers });
+    if (res.status === 401 && allowRetry) {
+      // Token revoked/expired server-side: drop it and retry once with fresh.
+      onUnauthorized?.();
+      return authed(url, init, false);
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(`Drive ${init.method ?? 'GET'} ${url} → ${res.status} ${body}`);
@@ -69,6 +84,18 @@ export function createDriveClient(getToken: TokenProvider): DriveClient {
   const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
   return {
+    async getFile(id) {
+      try {
+        const res = await authed(
+          `${API}/files/${id}?fields=id,name,mimeType,trashed,createdTime,appProperties,parents`,
+        );
+        return (await res.json()) as DriveFile;
+      } catch (e) {
+        if ((e as Error).message.includes(' 404')) return null;
+        throw e;
+      }
+    },
+
     listFolders(parentId) {
       return query(
         `'${esc(parentId)}' in parents and mimeType='${DRIVE_FOLDER_MIME}' and trashed=false`,

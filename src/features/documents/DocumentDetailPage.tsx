@@ -67,11 +67,18 @@ export default function DocumentDetailPage({ match, history }: Props) {
     blob: await service.getPartBlob(p.id),
   });
 
+  const toastError = (prefix: string, e: unknown) => {
+    if ((e as Error).name === 'AbortError') return; // user closed the share sheet
+    presentToast({ message: `${prefix}: ${(e as Error).message}`, duration: 3000 });
+  };
+
   const onDownload = async () => {
     if (!part) return;
     setBusy(true);
     try {
       downloadFile(await withBlob(part));
+    } catch (e) {
+      toastError('Download failed', e);
     } finally {
       setBusy(false);
     }
@@ -86,9 +93,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
         presentToast({ message: 'File downloaded — attach it in WhatsApp.', duration: 2500 });
       }
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') {
-        presentToast({ message: `Share failed: ${(e as Error).message}`, duration: 2500 });
-      }
+      toastError('Share failed', e);
     } finally {
       setBusy(false);
     }
@@ -103,6 +108,8 @@ export default function DocumentDetailPage({ match, history }: Props) {
         const label = `Page ${doc.parts.length + 1}`;
         await addPart(doc.id, { label, filename: suggestFilename(label, file), blob: file });
         setActive(doc.parts.length);
+      } catch (e) {
+        toastError('Could not add the page', e);
       } finally {
         setBusy(false);
       }
@@ -129,8 +136,12 @@ export default function DocumentDetailPage({ match, history }: Props) {
           role: 'destructive',
           icon: trashOutline,
           handler: async () => {
-            await removePart(doc.id, part.id);
-            setActive((i) => Math.max(0, i - 1));
+            try {
+              await removePart(doc.id, part.id);
+              setActive((i) => Math.max(0, i - 1));
+            } catch (e) {
+              toastError('Delete failed', e);
+            }
           },
         },
         { text: 'Cancel', role: 'cancel' },
@@ -148,8 +159,12 @@ export default function DocumentDetailPage({ match, history }: Props) {
           role: 'destructive',
           icon: trashOutline,
           handler: async () => {
-            await remove(doc.id);
-            history.replace('/documents');
+            try {
+              await remove(doc.id);
+              history.replace('/documents');
+            } catch (e) {
+              toastError('Delete failed', e);
+            }
           },
         },
         { text: 'Cancel', role: 'cancel' },
@@ -174,6 +189,16 @@ export default function DocumentDetailPage({ match, history }: Props) {
 
       <IonContent fullscreen scrollY={false} className="detail">
         <div className="detail__layout">
+          {doc.parts.length === 0 && (
+            <div className="detail__none">
+              <p>This document has no pages.</p>
+              <IonButton onClick={openAddPart}>
+                <IonIcon slot="start" icon={addOutline} />
+                Add a page
+              </IonButton>
+            </div>
+          )}
+
           {doc.parts.length > 1 && (
             <div className="detail__tabs">
               {doc.parts.map((p, i) => (

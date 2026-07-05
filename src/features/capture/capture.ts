@@ -32,12 +32,10 @@ export function pickFiles(source: CaptureSource, multiple = false): Promise<File
     };
 
     input.onchange = () => done(input.files ? Array.from(input.files) : []);
-    // Fallback: if focus returns with no selection, treat as cancel.
-    window.addEventListener(
-      'focus',
-      () => setTimeout(() => done([]), 500),
-      { once: true },
-    );
+    // Native cancel event (all modern browsers). We deliberately do NOT use a
+    // window-focus fallback: on mobile, focus can return before the camera
+    // finishes processing the photo, which would resolve empty and lose it.
+    input.oncancel = () => done([]);
 
     document.body.appendChild(input);
     input.click();

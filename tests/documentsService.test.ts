@@ -9,6 +9,9 @@ function fakeDrive() {
   const id = () => `id-${++seq}`;
 
   const client: DriveClient = {
+    async getFile(fileId) {
+      return files.get(fileId) ?? null;
+    },
     async listFolders(parentId) {
       return [...files.values()].filter(
         (f) => f.mimeType === 'application/vnd.google-apps.folder' && f.parents?.[0] === parentId,
@@ -78,6 +81,20 @@ describe('documentsService', () => {
     expect(a).toBe(b);
     expect(spy).toHaveBeenCalledTimes(1); // memoised + cached
     expect(localStorage.getItem('vault.rootFolderId')).toBe(a);
+  });
+
+  it('re-discovers the root when the cached id no longer exists in Drive', async () => {
+    const { client } = fakeDrive();
+    localStorage.setItem('vault.rootFolderId', 'ghost-id'); // stale/deleted folder
+    const svc = createDocumentsService(client);
+
+    const rootId = await svc.ensureRoot();
+
+    expect(rootId).not.toBe('ghost-id');
+    expect(localStorage.getItem('vault.rootFolderId')).toBe(rootId);
+    // And the recovered root actually works:
+    const folder = await client.getFile(rootId);
+    expect(folder?.name).toBe('Document Vault');
   });
 
   it('creates a multi-part document as a folder with part files', async () => {
