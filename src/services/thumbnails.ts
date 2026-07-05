@@ -48,7 +48,7 @@ async function renderPdfThumb(blob: Blob): Promise<string> {
   // Lazy-load pdf.js so it isn't in the initial bundle.
   const { loadPdf, renderPageToCanvas } = await import('../features/documents/pdf');
   const pdf = await loadPdf(await blob.arrayBuffer());
-  const canvas = await renderPageToCanvas(pdf, 1, THUMB_WIDTH);
+  const canvas = await renderPageToCanvas(pdf, 1, THUMB_WIDTH, 1);
   return canvas.toDataURL('image/jpeg', 0.82);
 }
 
