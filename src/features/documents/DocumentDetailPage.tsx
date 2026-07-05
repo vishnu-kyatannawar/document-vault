@@ -11,23 +11,32 @@ import {
   IonTitle,
   IonToolbar,
   useIonActionSheet,
+  useIonAlert,
   useIonToast,
 } from '@ionic/react';
 import {
   addOutline,
   cameraOutline,
+  createOutline,
   documentAttachOutline,
+  documentTextOutline,
   downloadOutline,
   ellipsisVertical,
   imagesOutline,
   shareSocialOutline,
   swapHorizontalOutline,
+  timeOutline,
   trashOutline,
 } from 'ionicons/icons';
 import { RouteComponentProps } from 'react-router-dom';
 import { ROOT_KEY, useDocumentsStore } from '../../store/documentsStore';
 import { documents as service } from '../../services/vault';
-import { DocumentPart, VaultDocument } from '../../services/documentsService';
+import {
+  DocumentPart,
+  VaultDocument,
+  expiryInfo,
+} from '../../services/documentsService';
+import EditDetailsModal from './EditDetailsModal';
 import { downloadFile, shareFile } from '../share/share';
 import { CaptureSource, pickFiles, suggestFilename } from '../capture/capture';
 import { logger } from '../../services/logger';
@@ -55,7 +64,9 @@ export default function DocumentDetailPage({ match, history }: Props) {
   const [busy, setBusy] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveFromKey, setMoveFromKey] = useState(ROOT_KEY);
+  const [editOpen, setEditOpen] = useState(false);
   const [presentActionSheet] = useIonActionSheet();
+  const [presentAlert] = useIonAlert();
   const [presentToast] = useIonToast();
 
   // Initialise from the browse cache; deep links fetch the doc directly.
@@ -117,6 +128,27 @@ export default function DocumentDetailPage({ match, history }: Props) {
 
   const safeActive = Math.min(active, Math.max(0, doc.parts.length - 1));
   const part: DocumentPart | undefined = doc.parts[safeActive];
+
+  const info = expiryInfo(doc);
+  const expiryLabel = (() => {
+    if (!doc.expiresAt || !info) return null;
+    const [y, m, d] = doc.expiresAt.split('-').map(Number);
+    const pretty = new Date(y, m - 1, d).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    if (info.state === 'expired') {
+      return info.days === 0 ? 'Expired today' : `Expired ${info.days}d ago`;
+    }
+    if (info.state === 'expiring') {
+      return info.days === 0 ? 'Expires today' : `Expires in ${info.days}d`;
+    }
+    return `Expires ${pretty}`;
+  })();
+
+  const showNotes = () =>
+    presentAlert({ header: 'Notes', message: doc.notes, buttons: ['Close'] });
 
   const withBlob = async (p: DocumentPart) => ({
     filename: p.name,
@@ -220,6 +252,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
       header: doc.title,
       buttons: [
         { text: 'Add page', icon: addOutline, handler: openAddPart },
+        { text: 'Edit details', icon: createOutline, handler: () => setEditOpen(true) },
         { text: 'Move to…', icon: swapHorizontalOutline, handler: () => void openMove() },
         {
           text: 'Delete document',
@@ -258,6 +291,23 @@ export default function DocumentDetailPage({ match, history }: Props) {
 
       <IonContent fullscreen scrollY={false} className="detail">
         <div className="detail__layout">
+          {(expiryLabel || doc.notes) && (
+            <div className="detail__meta">
+              {expiryLabel && info && (
+                <span className={`detail__chip detail__chip--${info.state}`}>
+                  <IonIcon icon={timeOutline} />
+                  {expiryLabel}
+                </span>
+              )}
+              {doc.notes && (
+                <button className="detail__chip detail__chip--notes" onClick={showNotes}>
+                  <IonIcon icon={documentTextOutline} />
+                  Notes
+                </button>
+              )}
+            </div>
+          )}
+
           {doc.parts.length === 0 && (
             <div className="detail__none">
               <p>This document has no pages.</p>
@@ -304,6 +354,22 @@ export default function DocumentDetailPage({ match, history }: Props) {
           </button>
         </div>
       </IonToolbar>
+
+      <EditDetailsModal
+        isOpen={editOpen}
+        doc={doc}
+        onDidDismiss={() => setEditOpen(false)}
+        onSave={async (meta) => {
+          await service.updateDocumentMeta(doc.id, meta);
+          setDoc({
+            ...doc,
+            expiresAt: meta.expiresAt,
+            remindDays: meta.remindDays,
+            notes: meta.notes,
+          });
+          invalidateForParent(doc.parentId);
+        }}
+      />
 
       <MoveTargetModal
         isOpen={moveOpen}

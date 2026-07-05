@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDocumentsService } from '../src/services/documentsService';
+import { createDocumentsService, expiryInfo } from '../src/services/documentsService';
 import type { DriveClient, DriveFile } from '../src/services/driveClient';
 
 const FOLDER = 'application/vnd.google-apps.folder';
@@ -37,17 +37,31 @@ function fakeDrive() {
         ) ?? null
       );
     },
-    async createFolder(name, parentId, appProperties) {
+    async createFolder(name, parentId, appProperties, description) {
       const f: DriveFile = {
         id: id(),
         name,
         mimeType: FOLDER,
         parents: parentId ? [parentId] : undefined,
         appProperties,
+        description,
         createdTime: new Date().toISOString(),
       };
       files.set(f.id, f);
       return f;
+    },
+    async updateFileMeta(fileId, meta) {
+      const f = files.get(fileId);
+      if (!f) return;
+      if (meta.description !== undefined) f.description = meta.description;
+      if (meta.appProperties) {
+        const merged = { ...f.appProperties };
+        for (const [k, v] of Object.entries(meta.appProperties)) {
+          if (v === null) delete merged[k];
+          else merged[k] = v;
+        }
+        f.appProperties = merged;
+      }
     },
     async renameFile(fileId, name) {
       const f = files.get(fileId);
@@ -116,14 +130,13 @@ describe('documentsService', () => {
     const { client } = fakeDrive();
     const svc = createDocumentsService(client);
 
-    const doc = await svc.createDocument('License', 'ID / License', [
+    const doc = await svc.createDocument('License', [
       { label: 'Front', filename: 'front.jpg', blob: new Blob(['1']) },
       { label: 'Back', filename: 'back.jpg', blob: new Blob(['2']) },
     ]);
 
     expect(doc.parts).toHaveLength(2);
     expect(doc.parts.map((p) => p.label)).toEqual(['Front', 'Back']);
-    expect(doc.category).toBe('ID / License');
   });
 
   it('separates groups from documents and treats legacy/untyped folders correctly', async () => {
@@ -132,7 +145,7 @@ describe('documentsService', () => {
     const rootId = await svc.ensureRoot();
 
     await svc.createGroup('Vehicles'); // kind=group
-    await svc.createDocument('Passport', 'ID / License', [
+    await svc.createDocument('Passport', [
       { label: 'Photo', filename: 'p.jpg', blob: new Blob(['1']) },
     ]);
     // Legacy document (pre-groups: title but no kind).
@@ -160,9 +173,7 @@ describe('documentsService', () => {
 
     const vehicles = await svc.createGroup('Vehicles');
     const car = await svc.createGroup('Car', vehicles.id);
-    await svc.createDocument(
-      'Insurance',
-      'Vehicle',
+    await svc.createDocument('Insurance',
       [{ label: 'Policy', filename: 'p.pdf', blob: new Blob(['1']) }],
       car.id,
     );
@@ -181,9 +192,7 @@ describe('documentsService', () => {
     const { client, files } = fakeDrive();
     const svc = createDocumentsService(client);
     const group = await svc.createGroup('House');
-    await svc.createDocument(
-      'Deed',
-      'Other',
+    await svc.createDocument('Deed',
       [{ label: 'Deed', filename: 'd.pdf', blob: new Blob(['1']) }],
       group.id,
     );
@@ -200,7 +209,7 @@ describe('documentsService', () => {
     const { client, files } = fakeDrive();
     const svc = createDocumentsService(client);
     const car = await svc.createGroup('Car');
-    const doc = await svc.createDocument('RC Book', 'Vehicle', [
+    const doc = await svc.createDocument('RC Book', [
       { label: 'Front', filename: 'f.jpg', blob: new Blob(['1']) },
     ]); // created at root
 
@@ -222,34 +231,111 @@ describe('documentsService', () => {
     );
   });
 
-  it('searches documents across all depths by title/category', async () => {
+  it('searches documents across all depths by title', async () => {
     const { client } = fakeDrive();
     const svc = createDocumentsService(client);
     const vehicles = await svc.createGroup('Vehicles');
     const car = await svc.createGroup('Car', vehicles.id);
-    await svc.createDocument(
-      'Car Insurance',
-      'Vehicle',
+    await svc.createDocument('Car Insurance',
       [{ label: 'Policy', filename: 'p.pdf', blob: new Blob(['1']) }],
       car.id,
     );
-    await svc.createDocument('Passport', 'ID / License', [
+    await svc.createDocument('Passport', [
       { label: 'Photo', filename: 'p.jpg', blob: new Blob(['1']) },
     ]);
 
     const byTitle = await svc.searchDocuments('insur');
     expect(byTitle.map((d) => d.title)).toEqual(['Car Insurance']);
 
-    const byCategory = await svc.searchDocuments('id /');
-    expect(byCategory.map((d) => d.title)).toEqual(['Passport']);
-
     expect(await svc.searchDocuments('nothing')).toEqual([]);
+  });
+
+  it('stores and reads expiry, reminder and notes', async () => {
+    const { client } = fakeDrive();
+    const svc = createDocumentsService(client);
+    await svc.createDocument(
+      'Insurance',
+      [{ label: 'Policy', filename: 'p.pdf', blob: new Blob(['1']) }],
+      undefined,
+      { expiresAt: '2027-07-14', remindDays: 30, notes: 'Policy #123' },
+    );
+
+    const level = await svc.listLevel();
+    expect(level.documents[0]).toMatchObject({
+      expiresAt: '2027-07-14',
+      remindDays: 30,
+      notes: 'Policy #123',
+    });
+  });
+
+  it('updateDocumentMeta updates and clears metadata', async () => {
+    const { client } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const doc = await svc.createDocument(
+      'Insurance',
+      [{ label: 'Policy', filename: 'p.pdf', blob: new Blob(['1']) }],
+      undefined,
+      { expiresAt: '2027-07-14', remindDays: 30, notes: 'old' },
+    );
+
+    await svc.updateDocumentMeta(doc.id, { expiresAt: '2028-01-01', remindDays: 5, notes: 'new' });
+    let level = await svc.listLevel();
+    expect(level.documents[0]).toMatchObject({
+      expiresAt: '2028-01-01',
+      remindDays: 5,
+      notes: 'new',
+    });
+
+    await svc.updateDocumentMeta(doc.id, {}); // clear everything
+    level = await svc.listLevel();
+    expect(level.documents[0].expiresAt).toBeUndefined();
+    expect(level.documents[0].remindDays).toBeUndefined();
+    expect(level.documents[0].notes).toBeUndefined();
+  });
+
+  it('expiryInfo honours the per-document reminder window', () => {
+    const now = new Date(2027, 6, 1); // 1 Jul 2027
+    expect(expiryInfo({ expiresAt: '2027-07-14', remindDays: 30 }, now)).toEqual({
+      state: 'expiring',
+      days: 13,
+    });
+    expect(expiryInfo({ expiresAt: '2027-07-14', remindDays: 5 }, now)).toEqual({
+      state: 'ok',
+      days: 13,
+    });
+    expect(expiryInfo({ expiresAt: '2027-06-30' }, now)).toEqual({ state: 'expired', days: 1 });
+    expect(expiryInfo({ expiresAt: '2027-07-01' }, now)).toEqual({ state: 'expiring', days: 0 });
+    expect(expiryInfo({}, now)).toBeNull();
+  });
+
+  it('listExpiring returns expired + in-window docs across depths, sorted by date', async () => {
+    const { client } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const car = await svc.createGroup('Car');
+    const part = () => [{ label: 'A', filename: 'a.pdf', blob: new Blob(['1']) }];
+    await svc.createDocument('Expired RC', part(), car.id, {
+      expiresAt: '2027-06-20',
+      remindDays: 5,
+    });
+    await svc.createDocument('Insurance soon', part(), undefined, {
+      expiresAt: '2027-07-10',
+      remindDays: 30,
+    });
+    await svc.createDocument('Far away', part(), undefined, {
+      expiresAt: '2028-07-01',
+      remindDays: 5,
+    });
+    await svc.createDocument('No expiry', part());
+
+    const now = new Date(2027, 6, 1); // 1 Jul 2027
+    const list = await svc.listExpiring(now);
+    expect(list.map((d) => d.title)).toEqual(['Expired RC', 'Insurance soon']);
   });
 
   it('deleting a document removes its part files too', async () => {
     const { client, files } = fakeDrive();
     const svc = createDocumentsService(client);
-    const doc = await svc.createDocument('Temp', 'Other', [
+    const doc = await svc.createDocument('Temp', [
       { label: 'A', filename: 'a.jpg', blob: new Blob(['1']) },
     ]);
 

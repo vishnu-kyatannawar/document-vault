@@ -26,6 +26,7 @@ import {
 } from '@ionic/react';
 import {
   add,
+  alertCircleOutline,
   bugOutline,
   chevronForward,
   documentOutline,
@@ -37,13 +38,14 @@ import {
   pencilOutline,
   shieldCheckmark,
   swapHorizontalOutline,
+  timeOutline,
   trashOutline,
 } from 'ionicons/icons';
 import { RouteComponentProps, useHistory } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { ROOT_KEY, useDocumentsStore } from '../../store/documentsStore';
 import { documents as service } from '../../services/vault';
-import { VaultDocument, VaultGroup } from '../../services/documentsService';
+import { VaultDocument, VaultGroup, expiryInfo } from '../../services/documentsService';
 import { resetLocalData } from '../../services/session';
 import { downloadLogs, logger } from '../../services/logger';
 import DocumentCard from './DocumentCard';
@@ -77,9 +79,20 @@ export default function GroupPage({ match }: Props) {
   const [presentAlert] = useIonAlert();
   const [presentToast] = useIonToast();
 
+  const [attention, setAttention] = useState<VaultDocument[]>([]);
+
+  const loadAttention = () => {
+    if (!isRoot) return;
+    service
+      .listExpiring()
+      .then(setAttention)
+      .catch((e) => logger.error('Expiring check failed', e as Error));
+  };
+
   const ensureLoaded = () => {
     const l = useDocumentsStore.getState().levels[levelKey];
     if (!l?.loaded && !l?.loading) void loadLevel(levelKey);
+    loadAttention();
   };
 
   useEffect(ensureLoaded, [levelKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -114,6 +127,7 @@ export default function GroupPage({ match }: Props) {
   }, [search]);
 
   const handleRefresh = async (e: RefresherCustomEvent) => {
+    loadAttention();
     await loadLevel(levelKey);
     e.detail.complete();
   };
@@ -292,6 +306,41 @@ export default function GroupPage({ match }: Props) {
           </>
         ) : (
           <>
+            {isRoot && attention.length > 0 && (
+              <div className="attn">
+                <p className="attn__title">
+                  <IonIcon icon={alertCircleOutline} />
+                  Needs attention
+                </p>
+                {attention.map((d) => {
+                  const info = expiryInfo(d)!;
+                  const expired = info.state === 'expired';
+                  return (
+                    <div
+                      key={d.id}
+                      className={`attn__row ${expired ? 'expired' : 'expiring'}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => history.push(`/documents/${d.id}`)}
+                      onKeyDown={(e) => e.key === 'Enter' && history.push(`/documents/${d.id}`)}
+                    >
+                      <IonIcon icon={expired ? alertCircleOutline : timeOutline} />
+                      <span className="attn__name">{d.title}</span>
+                      <span className="attn__badge">
+                        {expired
+                          ? info.days === 0
+                            ? 'Expired today'
+                            : `Expired ${info.days}d ago`
+                          : info.days === 0
+                            ? 'Expires today'
+                            : `${info.days}d left`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {level?.loading && !level.loaded && (
               <div className="docs-grid" aria-hidden="true">
                 {Array.from({ length: 6 }, (_, i) => (

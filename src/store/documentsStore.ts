@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { NewPart, VaultDocument, VaultGroup } from '../services/documentsService';
+import { DocMeta, NewPart, VaultDocument, VaultGroup } from '../services/documentsService';
 import { documents as service } from '../services/vault';
 import { logger } from '../services/logger';
 
@@ -33,8 +33,8 @@ interface DocumentsState {
   createDocument: (
     key: string,
     title: string,
-    category: string,
     parts: NewPart[],
+    meta?: DocMeta,
   ) => Promise<void>;
   /** Move a doc/group between level keys ('root' or group ids). */
   moveItem: (id: string, fromKey: string, toKey: string) => Promise<void>;
@@ -118,8 +118,8 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => {
       patchLevel(key, { groups: level.groups.filter((g) => g.id !== id) });
     },
 
-    createDocument: async (key, title, category, parts) => {
-      const doc = await service.createDocument(title, category, parts, toParentId(key));
+    createDocument: async (key, title, parts, meta) => {
+      const doc = await service.createDocument(title, parts, toParentId(key), meta);
       const level = get().levels[key] ?? emptyLevel;
       patchLevel(key, { documents: [doc, ...level.documents] });
     },

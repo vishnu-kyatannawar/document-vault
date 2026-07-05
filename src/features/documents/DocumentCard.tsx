@@ -1,7 +1,7 @@
 import { IonCard, IonIcon, IonSpinner } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
-import { documentTextOutline, layersOutline } from 'ionicons/icons';
-import { VaultDocument } from '../../services/documentsService';
+import { documentTextOutline, layersOutline, timeOutline } from 'ionicons/icons';
+import { VaultDocument, expiryInfo } from '../../services/documentsService';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import './DocumentCard.css';
 
@@ -9,10 +9,13 @@ export default function DocumentCard({ doc }: { doc: VaultDocument }) {
   const history = useHistory();
   const cover = doc.parts[0];
   const { url, failed } = useThumbnail(cover);
+  const info = expiryInfo(doc);
+  const expired = info?.state === 'expired';
+  const expiring = info?.state === 'expiring';
 
   return (
     <IonCard
-      className="doc-card"
+      className={`doc-card ${expired ? 'doc-card--expired' : ''}`}
       button
       onClick={() => history.push(`/documents/${doc.id}`)}
     >
@@ -29,10 +32,19 @@ export default function DocumentCard({ doc }: { doc: VaultDocument }) {
             <IonIcon icon={layersOutline} /> {doc.parts.length}
           </span>
         )}
+        {(expired || expiring) && info && (
+          <span className={`doc-card__expiry ${expired ? 'expired' : 'expiring'}`}>
+            <IonIcon icon={timeOutline} />
+            {expired
+              ? 'Expired'
+              : info.days === 0
+                ? 'Today'
+                : `${info.days}d left`}
+          </span>
+        )}
       </div>
       <div className="doc-card__body">
         <h3>{doc.title}</h3>
-        <span className="doc-card__cat">{doc.category}</span>
       </div>
     </IonCard>
   );

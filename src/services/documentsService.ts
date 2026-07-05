@@ -33,10 +33,46 @@ export interface VaultGroup {
 export interface VaultDocument {
   id: string;
   title: string;
-  category: string;
   createdAt: string;
+  /** ISO date (YYYY-MM-DD), optional. */
+  expiresAt?: string;
+  /** Days before expiry to start warning; defaults to DEFAULT_REMIND_DAYS. */
+  remindDays?: number;
+  notes?: string;
   parts: DocumentPart[];
   parentId: string;
+}
+
+/** Optional per-document metadata (all clearable). */
+export interface DocMeta {
+  expiresAt?: string;
+  remindDays?: number;
+  notes?: string;
+}
+
+export const DEFAULT_REMIND_DAYS = 30;
+export const REMIND_OPTIONS = [5, 7, 14, 30, 60, 90];
+
+export interface ExpiryInfo {
+  state: 'expired' | 'expiring' | 'ok';
+  /** Days overdue when expired, days remaining otherwise. */
+  days: number;
+}
+
+/** Expiry state relative to `now`, honouring the per-document reminder window. */
+export function expiryInfo(
+  doc: { expiresAt?: string; remindDays?: number },
+  now: Date = new Date(),
+): ExpiryInfo | null {
+  if (!doc.expiresAt) return null;
+  const [y, m, d] = doc.expiresAt.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const expiry = new Date(y, m - 1, d).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const days = Math.round((expiry - today) / 86_400_000);
+  if (days < 0) return { state: 'expired', days: -days };
+  if (days <= (doc.remindDays ?? DEFAULT_REMIND_DAYS)) return { state: 'expiring', days };
+  return { state: 'ok', days };
 }
 
 export interface VaultLevel {
@@ -63,10 +99,14 @@ export interface DocumentsService {
   deleteGroupIfEmpty(id: string): Promise<void>;
   createDocument(
     title: string,
-    category: string,
     parts: NewPart[],
     parentId?: string,
+    meta?: DocMeta,
   ): Promise<VaultDocument>;
+  /** Update (or clear) a document's expiry/reminder/notes. */
+  updateDocumentMeta(id: string, meta: DocMeta): Promise<void>;
+  /** All documents (any depth) that are expired or inside their reminder window. */
+  listExpiring(now?: Date): Promise<VaultDocument[]>;
   /** Fetch a single document by id (deep links), or null if gone. */
   getDocument(id: string): Promise<VaultDocument | null>;
   addPart(documentId: string, part: NewPart): Promise<DocumentPart>;
@@ -102,11 +142,14 @@ function classify(folder: DriveFile): 'doc' | 'group' {
 }
 
 function toDoc(folder: DriveFile, parts: DocumentPart[], parentId: string): VaultDocument {
+  const remind = folder.appProperties?.remindDays;
   return {
     id: folder.id,
     title: folder.appProperties?.title ?? folder.name,
-    category: folder.appProperties?.category ?? 'Other',
     createdAt: folder.appProperties?.createdAt ?? folder.createdTime ?? '',
+    expiresAt: folder.appProperties?.expiresAt || undefined,
+    remindDays: remind ? Number.parseInt(remind, 10) || undefined : undefined,
+    notes: folder.description || undefined,
     parts,
     parentId,
   };
@@ -207,19 +250,47 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       await drive.deleteFile(id);
     },
 
-    async createDocument(title, category, parts, parentId) {
+    async createDocument(title, parts, parentId, meta) {
       const pid = parentId ?? (await ensureRoot());
       const createdAt = new Date().toISOString();
-      const folder = await drive.createFolder(title, pid, {
-        kind: 'doc',
-        title,
-        category,
-        createdAt,
-      });
+      const appProperties: Record<string, string> = { kind: 'doc', title, createdAt };
+      if (meta?.expiresAt) appProperties.expiresAt = meta.expiresAt;
+      if (meta?.remindDays != null) appProperties.remindDays = String(meta.remindDays);
+      const folder = await drive.createFolder(title, pid, appProperties, meta?.notes);
       const uploaded = await Promise.all(
         parts.map((p) => drive.uploadFile(folder.id, p.filename, p.blob, { label: p.label })),
       );
-      return { id: folder.id, title, category, createdAt, parts: uploaded.map(toPart), parentId: pid };
+      return {
+        id: folder.id,
+        title,
+        createdAt,
+        expiresAt: meta?.expiresAt,
+        remindDays: meta?.remindDays,
+        notes: meta?.notes,
+        parts: uploaded.map(toPart),
+        parentId: pid,
+      };
+    },
+
+    async updateDocumentMeta(id, meta) {
+      await drive.updateFileMeta(id, {
+        description: meta.notes ?? '',
+        appProperties: {
+          expiresAt: meta.expiresAt ?? null, // null deletes the key
+          remindDays: meta.remindDays != null ? String(meta.remindDays) : null,
+        },
+      });
+    },
+
+    async listExpiring(now = new Date()) {
+      const all = await drive.listByAppProperty('kind', 'doc');
+      return all
+        .map((f) => toDoc(f, [], f.parents?.[0] ?? ''))
+        .filter((d) => {
+          const info = expiryInfo(d, now);
+          return info !== null && info.state !== 'ok';
+        })
+        .sort((a, b) => a.expiresAt!.localeCompare(b.expiresAt!));
     },
 
     async getDocument(id) {
@@ -270,11 +341,7 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       if (!q) return [];
       const all = await drive.listByAppProperty('kind', 'doc');
       const matches = all
-        .filter(
-          (f) =>
-            (f.appProperties?.title ?? f.name).toLowerCase().includes(q) ||
-            (f.appProperties?.category ?? '').toLowerCase().includes(q),
-        )
+        .filter((f) => (f.appProperties?.title ?? f.name).toLowerCase().includes(q))
         .slice(0, 30);
       return Promise.all(matches.map((f) => docWithParts(f, f.parents?.[0] ?? '')));
     },

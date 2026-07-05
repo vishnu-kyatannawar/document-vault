@@ -13,6 +13,7 @@ import {
   IonSelectOption,
   IonSpinner,
   IonText,
+  IonTextarea,
   IonTitle,
   IonToolbar,
   useIonActionSheet,
@@ -26,9 +27,8 @@ import {
 } from 'ionicons/icons';
 import { CaptureSource, pickFiles, suggestFilename } from './capture';
 import { useDocumentsStore } from '../../store/documentsStore';
+import { DEFAULT_REMIND_DAYS, REMIND_OPTIONS } from '../../services/documentsService';
 import './AddDocumentSheet.css';
-
-const CATEGORIES = ['ID / License', 'Financial', 'Medical', 'Education', 'Vehicle', 'Other'];
 
 interface StagedPart {
   label: string;
@@ -47,7 +47,9 @@ export default function AddDocumentSheet({ isOpen, parentKey, onDidDismiss }: Pr
   const create = useDocumentsStore((s) => s.createDocument);
   const [presentActionSheet] = useIonActionSheet();
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [expiresAt, setExpiresAt] = useState('');
+  const [remindDays, setRemindDays] = useState(DEFAULT_REMIND_DAYS);
+  const [notes, setNotes] = useState('');
   const [parts, setParts] = useState<StagedPart[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,9 @@ export default function AddDocumentSheet({ isOpen, parentKey, onDidDismiss }: Pr
   const reset = () => {
     parts.forEach((p) => URL.revokeObjectURL(p.previewUrl));
     setTitle('');
-    setCategory(CATEGORIES[0]);
+    setExpiresAt('');
+    setRemindDays(DEFAULT_REMIND_DAYS);
+    setNotes('');
     setParts([]);
     setSaving(false);
     setError(null);
@@ -105,12 +109,16 @@ export default function AddDocumentSheet({ isOpen, parentKey, onDidDismiss }: Pr
       await create(
         parentKey,
         title.trim(),
-        category,
         parts.map((p) => ({
           label: p.label || 'Page',
           filename: suggestFilename(p.label || 'page', p.file),
           blob: p.file,
         })),
+        {
+          expiresAt: expiresAt || undefined,
+          remindDays: expiresAt ? remindDays : undefined,
+          notes: notes.trim() || undefined,
+        },
       );
       close();
     } catch (e) {
@@ -151,18 +159,40 @@ export default function AddDocumentSheet({ isOpen, parentKey, onDidDismiss }: Pr
             />
           </IonItem>
           <IonItem>
-            <IonSelect
-              label="Category"
+            <IonInput
+              label="Expiry date (optional)"
               labelPlacement="stacked"
-              value={category}
-              onIonChange={(e) => setCategory(e.detail.value)}
-            >
-              {CATEGORIES.map((c) => (
-                <IonSelectOption key={c} value={c}>
-                  {c}
-                </IonSelectOption>
-              ))}
-            </IonSelect>
+              type="date"
+              value={expiresAt}
+              onIonInput={(e) => setExpiresAt(e.detail.value ?? '')}
+            />
+          </IonItem>
+          {expiresAt && (
+            <IonItem>
+              <IonSelect
+                label="Remind me before"
+                labelPlacement="stacked"
+                value={remindDays}
+                onIonChange={(e) => setRemindDays(e.detail.value)}
+              >
+                {REMIND_OPTIONS.map((d) => (
+                  <IonSelectOption key={d} value={d}>
+                    {d} days
+                  </IonSelectOption>
+                ))}
+              </IonSelect>
+            </IonItem>
+          )}
+          <IonItem>
+            <IonTextarea
+              label="Notes (optional)"
+              labelPlacement="stacked"
+              placeholder="e.g. policy number, renewal contact…"
+              autoGrow
+              rows={2}
+              value={notes}
+              onIonInput={(e) => setNotes(e.detail.value ?? '')}
+            />
           </IonItem>
         </IonList>
 

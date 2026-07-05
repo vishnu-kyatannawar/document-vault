@@ -15,6 +15,7 @@ export interface DriveFile {
   trashed?: boolean;
   thumbnailLink?: string;
   createdTime?: string;
+  description?: string;
   appProperties?: Record<string, string>;
   parents?: string[];
 }
@@ -33,7 +34,16 @@ export interface DriveClient {
     name: string,
     parentId?: string,
     appProperties?: Record<string, string>,
+    description?: string,
   ): Promise<DriveFile>;
+  /**
+   * Patch description and/or appProperties. A property value of `null`
+   * deletes that key (Drive semantics).
+   */
+  updateFileMeta(
+    id: string,
+    meta: { description?: string; appProperties?: Record<string, string | null> },
+  ): Promise<void>;
   uploadFile(
     parentId: string,
     name: string,
@@ -70,7 +80,8 @@ export function createDriveClient(
     return res;
   }
 
-  const FIELDS = 'files(id,name,mimeType,thumbnailLink,createdTime,appProperties,parents)';
+  const FIELDS =
+    'files(id,name,mimeType,thumbnailLink,createdTime,description,appProperties,parents)';
 
   async function query(q: string): Promise<DriveFile[]> {
     const params = new URLSearchParams({
@@ -91,7 +102,7 @@ export function createDriveClient(
     async getFile(id) {
       try {
         const res = await authed(
-          `${API}/files/${id}?fields=id,name,mimeType,trashed,createdTime,appProperties,parents`,
+          `${API}/files/${id}?fields=id,name,mimeType,trashed,createdTime,description,appProperties,parents`,
         );
         return (await res.json()) as DriveFile;
       } catch (e) {
@@ -146,18 +157,30 @@ export function createDriveClient(
       return files[0] ?? null;
     },
 
-    async createFolder(name, parentId, appProperties) {
-      const res = await authed(`${API}/files?fields=id,name,mimeType,appProperties`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          mimeType: DRIVE_FOLDER_MIME,
-          parents: parentId ? [parentId] : undefined,
-          appProperties,
-        }),
-      });
+    async createFolder(name, parentId, appProperties, description) {
+      const res = await authed(
+        `${API}/files?fields=id,name,mimeType,description,appProperties`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            mimeType: DRIVE_FOLDER_MIME,
+            parents: parentId ? [parentId] : undefined,
+            appProperties,
+            description,
+          }),
+        },
+      );
       return (await res.json()) as DriveFile;
+    },
+
+    async updateFileMeta(id, meta) {
+      await authed(`${API}/files/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(meta),
+      });
     },
 
     async uploadFile(parentId, name, blob, appProperties) {
