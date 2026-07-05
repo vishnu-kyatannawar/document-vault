@@ -30,33 +30,58 @@ export interface AccessGrant {
   scope: string;
 }
 
+// Google recommends creating ONE token client and reusing it. A single shared
+// callback resolves whichever request is currently pending; starting a new
+// request supersedes any stale one so overlapping calls (e.g. silent restore
+// then an interactive tap) can never wedge GIS into an unresolved state.
+let tokenClient: TokenClient | null = null;
+let pending: { resolve: (g: AccessGrant) => void; reject: (e: Error) => void } | null =
+  null;
+
+function settle(fn: (p: NonNullable<typeof pending>) => void): void {
+  if (!pending) return;
+  const p = pending;
+  pending = null;
+  fn(p);
+}
+
+async function ensureClient(): Promise<TokenClient> {
+  await loadGis();
+  if (tokenClient) return tokenClient;
+  const oauth2 = window.google!.accounts.oauth2;
+  tokenClient = oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: AUTH_SCOPES,
+    callback: (resp) =>
+      settle((p) => {
+        if (resp.error) {
+          p.reject(new Error(resp.error_description || resp.error));
+        } else {
+          p.resolve({
+            accessToken: resp.access_token,
+            // Refresh a minute early to avoid mid-request expiry.
+            expiresAt: Date.now() + (resp.expires_in - 60) * 1000,
+            scope: resp.scope,
+          });
+        }
+      }),
+    error_callback: (err) => settle((p) => p.reject(new Error(err.type))),
+  });
+  return tokenClient;
+}
+
 /**
  * Request an access token via the OAuth token flow.
- * @param interactive when false, attempts a silent refresh (prompt: 'none').
+ * @param interactive when false, attempts a silent token (prompt: 'none').
  */
 export async function requestAccessToken(interactive: boolean): Promise<AccessGrant> {
-  await loadGis();
-  const oauth2 = window.google!.accounts.oauth2;
-
+  const client = await ensureClient();
+  // Abandon any in-flight request before starting a new one.
+  settle((p) => p.reject(new Error('superseded')));
   return new Promise<AccessGrant>((resolve, reject) => {
-    const client = oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: AUTH_SCOPES,
-      callback: (resp) => {
-        if (resp.error) {
-          reject(new Error(resp.error_description || resp.error));
-          return;
-        }
-        resolve({
-          accessToken: resp.access_token,
-          // Refresh a minute early to avoid mid-request expiry.
-          expiresAt: Date.now() + (resp.expires_in - 60) * 1000,
-          scope: resp.scope,
-        });
-      },
-      error_callback: (err) => reject(new Error(err.type)),
-    });
-    client.requestAccessToken({ prompt: interactive ? 'consent' : 'none' });
+    pending = { resolve, reject };
+    // Interactive uses '' (no forced re-consent once granted); silent uses 'none'.
+    client.requestAccessToken({ prompt: interactive ? '' : 'none' });
   });
 }
 

@@ -43,7 +43,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   restore: async () => {
     set({ status: 'restoring', error: null });
     try {
-      const grant = await requestAccessToken(false); // prompt: 'none'
+      // Guard against a silent request that never calls back on some browsers.
+      const grant = await Promise.race([
+        requestAccessToken(false), // prompt: 'none'
+        new Promise<never>((_, rej) =>
+          setTimeout(() => rej(new Error('silent-timeout')), 8000),
+        ),
+      ]);
       const profile = await loadProfile(grant.accessToken);
       set({ grant, profile, status: 'authenticated' });
     } catch {
