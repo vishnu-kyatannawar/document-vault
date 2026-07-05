@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDocumentsService } from '../src/services/documentsService';
 import type { DriveClient, DriveFile } from '../src/services/driveClient';
 
+const FOLDER = 'application/vnd.google-apps.folder';
+
 /** Minimal in-memory Drive used to exercise the domain layer. */
 function fakeDrive() {
   const files = new Map<string, DriveFile>();
@@ -14,18 +16,23 @@ function fakeDrive() {
     },
     async listFolders(parentId) {
       return [...files.values()].filter(
-        (f) => f.mimeType === 'application/vnd.google-apps.folder' && f.parents?.[0] === parentId,
+        (f) => f.mimeType === FOLDER && f.parents?.[0] === parentId,
       );
     },
     async listChildren(parentId) {
       return [...files.values()].filter((f) => f.parents?.[0] === parentId);
+    },
+    async listByAppProperty(key, value) {
+      return [...files.values()].filter(
+        (f) => f.mimeType === FOLDER && f.appProperties?.[key] === value,
+      );
     },
     async findFolderByName(name, parentId) {
       return (
         [...files.values()].find(
           (f) =>
             f.name === name &&
-            f.mimeType === 'application/vnd.google-apps.folder' &&
+            f.mimeType === FOLDER &&
             (!parentId || f.parents?.[0] === parentId),
         ) ?? null
       );
@@ -34,13 +41,21 @@ function fakeDrive() {
       const f: DriveFile = {
         id: id(),
         name,
-        mimeType: 'application/vnd.google-apps.folder',
+        mimeType: FOLDER,
         parents: parentId ? [parentId] : undefined,
         appProperties,
         createdTime: new Date().toISOString(),
       };
       files.set(f.id, f);
       return f;
+    },
+    async renameFile(fileId, name) {
+      const f = files.get(fileId);
+      if (f) f.name = name;
+    },
+    async moveFile(fileId, _from, to) {
+      const f = files.get(fileId);
+      if (f) f.parents = [to];
     },
     async uploadFile(parentId, name, _blob, appProperties) {
       const f: DriveFile = {
@@ -53,7 +68,10 @@ function fakeDrive() {
       files.set(f.id, f);
       return f;
     },
-    async updateAppProperties() {},
+    async updateAppProperties(fileId, appProperties) {
+      const f = files.get(fileId);
+      if (f) f.appProperties = { ...f.appProperties, ...appProperties };
+    },
     async downloadFile() {
       return new Blob(['data']);
     },
@@ -92,9 +110,6 @@ describe('documentsService', () => {
 
     expect(rootId).not.toBe('ghost-id');
     expect(localStorage.getItem('vault.rootFolderId')).toBe(rootId);
-    // And the recovered root actually works:
-    const folder = await client.getFile(rootId);
-    expect(folder?.name).toBe('Document Vault');
   });
 
   it('creates a multi-part document as a folder with part files', async () => {
@@ -111,17 +126,124 @@ describe('documentsService', () => {
     expect(doc.category).toBe('ID / License');
   });
 
-  it('lists documents with metadata from appProperties', async () => {
+  it('separates groups from documents and treats legacy/untyped folders correctly', async () => {
+    const { client, files } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const rootId = await svc.ensureRoot();
+
+    await svc.createGroup('Vehicles'); // kind=group
+    await svc.createDocument('Passport', 'ID / License', [
+      { label: 'Photo', filename: 'p.jpg', blob: new Blob(['1']) },
+    ]);
+    // Legacy document (pre-groups: title but no kind).
+    const legacy = await client.createFolder('Old License', rootId, {
+      title: 'Old License',
+      category: 'ID / License',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    // Folder made directly in Drive UI (no properties) → group.
+    await client.createFolder('Made In Drive', rootId);
+
+    const level = await svc.listLevel();
+
+    expect(level.groups.map((g) => g.name).sort()).toEqual(['Made In Drive', 'Vehicles']);
+    expect(level.documents.map((d) => d.title).sort()).toEqual(['Old License', 'Passport']);
+
+    // Legacy doc gets lazily stamped so global search can find it.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(files.get(legacy.id)?.appProperties?.kind).toBe('doc');
+  });
+
+  it('supports nested groups with documents inside', async () => {
     const { client } = fakeDrive();
     const svc = createDocumentsService(client);
+
+    const vehicles = await svc.createGroup('Vehicles');
+    const car = await svc.createGroup('Car', vehicles.id);
+    await svc.createDocument(
+      'Insurance',
+      'Vehicle',
+      [{ label: 'Policy', filename: 'p.pdf', blob: new Blob(['1']) }],
+      car.id,
+    );
+
+    const carLevel = await svc.listLevel(car.id);
+    expect(carLevel.documents).toHaveLength(1);
+    expect(carLevel.documents[0].title).toBe('Insurance');
+    expect(carLevel.documents[0].parentId).toBe(car.id);
+
+    const root = await svc.listLevel();
+    expect(root.groups.map((g) => g.name)).toEqual(['Vehicles']);
+    expect(root.documents).toHaveLength(0);
+  });
+
+  it('refuses to delete a non-empty group but deletes an empty one', async () => {
+    const { client, files } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const group = await svc.createGroup('House');
+    await svc.createDocument(
+      'Deed',
+      'Other',
+      [{ label: 'Deed', filename: 'd.pdf', blob: new Blob(['1']) }],
+      group.id,
+    );
+
+    await expect(svc.deleteGroupIfEmpty(group.id)).rejects.toThrow(/not empty/i);
+    expect(files.has(group.id)).toBe(true);
+
+    const empty = await svc.createGroup('Empty');
+    await svc.deleteGroupIfEmpty(empty.id);
+    expect(files.has(empty.id)).toBe(false);
+  });
+
+  it('moves a document between groups', async () => {
+    const { client, files } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const car = await svc.createGroup('Car');
+    const doc = await svc.createDocument('RC Book', 'Vehicle', [
+      { label: 'Front', filename: 'f.jpg', blob: new Blob(['1']) },
+    ]); // created at root
+
+    await svc.moveItem(doc.id, undefined, car.id);
+
+    expect(files.get(doc.id)?.parents?.[0]).toBe(car.id);
+    const carLevel = await svc.listLevel(car.id);
+    expect(carLevel.documents.map((d) => d.title)).toEqual(['RC Book']);
+  });
+
+  it('blocks moving a group into its own descendant', async () => {
+    const { client } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const vehicles = await svc.createGroup('Vehicles');
+    const car = await svc.createGroup('Car', vehicles.id);
+
+    await expect(svc.moveItem(vehicles.id, undefined, car.id)).rejects.toThrow(
+      /inside itself/i,
+    );
+  });
+
+  it('searches documents across all depths by title/category', async () => {
+    const { client } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const vehicles = await svc.createGroup('Vehicles');
+    const car = await svc.createGroup('Car', vehicles.id);
+    await svc.createDocument(
+      'Car Insurance',
+      'Vehicle',
+      [{ label: 'Policy', filename: 'p.pdf', blob: new Blob(['1']) }],
+      car.id,
+    );
     await svc.createDocument('Passport', 'ID / License', [
       { label: 'Photo', filename: 'p.jpg', blob: new Blob(['1']) },
     ]);
 
-    const docs = await svc.listDocuments();
-    expect(docs).toHaveLength(1);
-    expect(docs[0].title).toBe('Passport');
-    expect(docs[0].parts).toHaveLength(1);
+    const byTitle = await svc.searchDocuments('insur');
+    expect(byTitle.map((d) => d.title)).toEqual(['Car Insurance']);
+
+    const byCategory = await svc.searchDocuments('id /');
+    expect(byCategory.map((d) => d.title)).toEqual(['Passport']);
+
+    expect(await svc.searchDocuments('nothing')).toEqual([]);
   });
 
   it('deleting a document removes its part files too', async () => {

@@ -4,7 +4,7 @@ import { IonReactRouter } from '@ionic/react-router';
 import { Redirect, Route } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import SignInPage from './features/auth/SignInPage';
-import DocumentsPage from './features/documents/DocumentsPage';
+import GroupPage from './features/documents/GroupPage';
 import DocumentDetailPage from './features/documents/DocumentDetailPage';
 import { isConfigured } from './config';
 import NotConfiguredPage from './features/auth/NotConfiguredPage';
@@ -55,7 +55,8 @@ export default function App() {
     <IonApp>
       <IonReactRouter basename={BASENAME}>
         <IonRouterOutlet>
-          <Route exact path="/documents" component={DocumentsPage} />
+          <Route exact path="/documents" component={GroupPage} />
+          <Route exact path="/g/:groupId" component={GroupPage} />
           <Route exact path="/documents/:id" component={DocumentDetailPage} />
           <Route exact path="/">
             <Redirect to="/documents" />

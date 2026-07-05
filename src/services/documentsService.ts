@@ -1,9 +1,15 @@
-// Domain layer: turns the folder-per-document Drive layout into Vault documents.
+// Domain layer: an arbitrary folder tree in Drive.
 //
-// Layout in Drive:
-//   "Document Vault"/                 (root, cached id)
-//     <Document folder>               (appProperties: title, category, createdAt)
-//       <part file>                   (appProperties: label)  e.g. Front / Back
+//   "Document Vault"/                    (root, cached id)
+//     <Group folder>                     (appProperties: kind='group')
+//       <Group folder>                   (groups nest to any depth)
+//       <Document folder>                (kind='doc' + title/category/createdAt)
+//         <part file>                    (appProperties: label)
+//
+// Legacy document folders (created before groups existed) have no `kind`; they
+// are detected by their `title` property and lazily stamped. Folders created
+// directly in the Drive UI have no properties at all and are treated as groups
+// so their contents stay reachable.
 
 import { ROOT_FOLDER_NAME } from '../config';
 import { DriveClient, DriveFile } from './driveClient';
@@ -18,12 +24,24 @@ export interface DocumentPart {
   thumbnailLink?: string;
 }
 
+export interface VaultGroup {
+  id: string;
+  name: string;
+  parentId: string;
+}
+
 export interface VaultDocument {
   id: string;
   title: string;
   category: string;
   createdAt: string;
   parts: DocumentPart[];
+  parentId: string;
+}
+
+export interface VaultLevel {
+  groups: VaultGroup[];
+  documents: VaultDocument[];
 }
 
 export interface NewPart {
@@ -36,12 +54,33 @@ export interface DocumentsService {
   ensureRoot(): Promise<string>;
   /** Forget the cached root folder id (e.g. on sign-out / account switch). */
   invalidateRoot(): void;
-  listDocuments(): Promise<VaultDocument[]>;
-  createDocument(title: string, category: string, parts: NewPart[]): Promise<VaultDocument>;
+  /** One level of the tree. `parentId` omitted = root. */
+  listLevel(parentId?: string): Promise<VaultLevel>;
+  getGroup(id: string): Promise<VaultGroup | null>;
+  createGroup(name: string, parentId?: string): Promise<VaultGroup>;
+  renameGroup(id: string, name: string): Promise<void>;
+  /** Deletes a group only when it has no contents; throws otherwise. */
+  deleteGroupIfEmpty(id: string): Promise<void>;
+  createDocument(
+    title: string,
+    category: string,
+    parts: NewPart[],
+    parentId?: string,
+  ): Promise<VaultDocument>;
+  /** Fetch a single document by id (deep links), or null if gone. */
+  getDocument(id: string): Promise<VaultDocument | null>;
   addPart(documentId: string, part: NewPart): Promise<DocumentPart>;
   deletePart(fileId: string): Promise<void>;
   deleteDocument(documentId: string): Promise<void>;
   getPartBlob(fileId: string): Promise<Blob>;
+  /** Move a document or group. `undefined` parent = root. Guards cycles. */
+  moveItem(
+    id: string,
+    fromParentId: string | undefined,
+    toParentId: string | undefined,
+  ): Promise<void>;
+  /** Search ALL documents at any depth by title/category substring. */
+  searchDocuments(text: string): Promise<VaultDocument[]>;
 }
 
 function toPart(file: DriveFile): DocumentPart {
@@ -51,6 +90,25 @@ function toPart(file: DriveFile): DocumentPart {
     name: file.name,
     mimeType: file.mimeType,
     thumbnailLink: file.thumbnailLink,
+  };
+}
+
+function classify(folder: DriveFile): 'doc' | 'group' {
+  const kind = folder.appProperties?.kind;
+  if (kind === 'doc') return 'doc';
+  if (kind === 'group') return 'group';
+  // Legacy documents carry a title; untyped folders are treated as groups.
+  return folder.appProperties?.title ? 'doc' : 'group';
+}
+
+function toDoc(folder: DriveFile, parts: DocumentPart[], parentId: string): VaultDocument {
+  return {
+    id: folder.id,
+    title: folder.appProperties?.title ?? folder.name,
+    category: folder.appProperties?.category ?? 'Other',
+    createdAt: folder.appProperties?.createdAt ?? folder.createdTime ?? '',
+    parts,
+    parentId,
   };
 }
 
@@ -83,6 +141,11 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
     return rootIdPromise;
   }
 
+  async function docWithParts(folder: DriveFile, parentId: string): Promise<VaultDocument> {
+    const children = await drive.listChildren(folder.id);
+    return toDoc(folder, children.map(toPart), parentId);
+  }
+
   return {
     ensureRoot,
 
@@ -91,40 +154,78 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       localStorage.removeItem(ROOT_CACHE_KEY);
     },
 
-    async listDocuments() {
-      const rootId = await ensureRoot();
-      const folders = await drive.listFolders(rootId);
-      const docs = await Promise.all(
-        folders.map(async (folder): Promise<VaultDocument> => {
-          const children = await drive.listChildren(folder.id);
-          return {
-            id: folder.id,
-            title: folder.appProperties?.title ?? folder.name,
-            category: folder.appProperties?.category ?? 'Other',
-            createdAt: folder.appProperties?.createdAt ?? folder.createdTime ?? '',
-            parts: children.map(toPart),
-          };
+    async listLevel(parentId) {
+      const pid = parentId ?? (await ensureRoot());
+      const folders = await drive.listFolders(pid);
+
+      const groups: VaultGroup[] = [];
+      const docFolders: DriveFile[] = [];
+      for (const f of folders) {
+        if (classify(f) === 'group') groups.push({ id: f.id, name: f.name, parentId: pid });
+        else docFolders.push(f);
+      }
+
+      const documents = await Promise.all(
+        docFolders.map((f) => {
+          // Lazily stamp legacy documents so global search can find them.
+          if (f.appProperties?.kind !== 'doc') {
+            void drive.updateAppProperties(f.id, { kind: 'doc' }).catch(() => undefined);
+          }
+          return docWithParts(f, pid);
         }),
       );
-      return docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+      groups.sort((a, b) => a.name.localeCompare(b.name));
+      documents.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return { groups, documents };
     },
 
-    async createDocument(title, category, parts) {
-      const rootId = await ensureRoot();
+    async getGroup(id) {
+      const f = await drive.getFile(id);
+      if (!f || f.trashed) return null;
+      return { id: f.id, name: f.name, parentId: f.parents?.[0] ?? '' };
+    },
+
+    async createGroup(name, parentId) {
+      const pid = parentId ?? (await ensureRoot());
+      const folder = await drive.createFolder(name, pid, {
+        kind: 'group',
+        createdAt: new Date().toISOString(),
+      });
+      return { id: folder.id, name, parentId: pid };
+    },
+
+    renameGroup(id, name) {
+      return drive.renameFile(id, name);
+    },
+
+    async deleteGroupIfEmpty(id) {
+      const children = await drive.listChildren(id);
+      if (children.length > 0) {
+        throw new Error('Group is not empty — move or delete its contents first.');
+      }
+      await drive.deleteFile(id);
+    },
+
+    async createDocument(title, category, parts, parentId) {
+      const pid = parentId ?? (await ensureRoot());
       const createdAt = new Date().toISOString();
-      const folder = await drive.createFolder(title, rootId, { title, category, createdAt });
-      const uploaded = await Promise.all(
-        parts.map((p) =>
-          drive.uploadFile(folder.id, p.filename, p.blob, { label: p.label }),
-        ),
-      );
-      return {
-        id: folder.id,
+      const folder = await drive.createFolder(title, pid, {
+        kind: 'doc',
         title,
         category,
         createdAt,
-        parts: uploaded.map(toPart),
-      };
+      });
+      const uploaded = await Promise.all(
+        parts.map((p) => drive.uploadFile(folder.id, p.filename, p.blob, { label: p.label })),
+      );
+      return { id: folder.id, title, category, createdAt, parts: uploaded.map(toPart), parentId: pid };
+    },
+
+    async getDocument(id) {
+      const f = await drive.getFile(id);
+      if (!f || f.trashed || classify(f) !== 'doc') return null;
+      return docWithParts(f, f.parents?.[0] ?? '');
     },
 
     async addPart(documentId, part) {
@@ -145,6 +246,37 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
 
     getPartBlob(fileId) {
       return drive.downloadFile(fileId);
+    },
+
+    async moveItem(id, fromParentId, toParentId) {
+      const from = fromParentId ?? (await ensureRoot());
+      const to = toParentId ?? (await ensureRoot());
+      if (from === to) return;
+
+      // Cycle guard: walk up from the destination; hitting the moved node
+      // means we'd be moving a group inside itself.
+      let cursor: string | null = to;
+      for (let depth = 0; cursor && depth < 30; depth += 1) {
+        if (cursor === id) throw new Error("Can't move a group inside itself.");
+        const f: DriveFile | null = await drive.getFile(cursor);
+        cursor = f?.parents?.[0] ?? null;
+      }
+
+      await drive.moveFile(id, from, to);
+    },
+
+    async searchDocuments(text) {
+      const q = text.trim().toLowerCase();
+      if (!q) return [];
+      const all = await drive.listByAppProperty('kind', 'doc');
+      const matches = all
+        .filter(
+          (f) =>
+            (f.appProperties?.title ?? f.name).toLowerCase().includes(q) ||
+            (f.appProperties?.category ?? '').toLowerCase().includes(q),
+        )
+        .slice(0, 30);
+      return Promise.all(matches.map((f) => docWithParts(f, f.parents?.[0] ?? '')));
     },
   };
 }

@@ -24,7 +24,11 @@ export interface DriveClient {
   getFile(id: string): Promise<DriveFile | null>;
   listFolders(parentId: string): Promise<DriveFile[]>;
   listChildren(parentId: string): Promise<DriveFile[]>;
+  /** All folders (anywhere) whose appProperties[key] === value. */
+  listByAppProperty(key: string, value: string): Promise<DriveFile[]>;
   findFolderByName(name: string, parentId?: string): Promise<DriveFile | null>;
+  renameFile(id: string, name: string): Promise<void>;
+  moveFile(id: string, fromParentId: string, toParentId: string): Promise<void>;
   createFolder(
     name: string,
     parentId?: string,
@@ -104,6 +108,34 @@ export function createDriveClient(
 
     listChildren(parentId) {
       return query(`'${esc(parentId)}' in parents and trashed=false`);
+    },
+
+    listByAppProperty(key, value) {
+      return query(
+        `appProperties has { key='${esc(key)}' and value='${esc(value)}' } ` +
+          `and mimeType='${DRIVE_FOLDER_MIME}' and trashed=false`,
+      );
+    },
+
+    async renameFile(id, name) {
+      await authed(`${API}/files/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+    },
+
+    async moveFile(id, fromParentId, toParentId) {
+      const params = new URLSearchParams({
+        addParents: toParentId,
+        removeParents: fromParentId,
+        fields: 'id,parents',
+      });
+      await authed(`${API}/files/${id}?${params.toString()}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
     },
 
     async findFolderByName(name, parentId) {

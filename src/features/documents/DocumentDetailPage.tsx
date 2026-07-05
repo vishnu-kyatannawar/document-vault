@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   IonBackButton,
   IonButton,
@@ -21,33 +21,89 @@ import {
   ellipsisVertical,
   imagesOutline,
   shareSocialOutline,
+  swapHorizontalOutline,
   trashOutline,
 } from 'ionicons/icons';
 import { RouteComponentProps } from 'react-router-dom';
-import { useDocumentsStore } from '../../store/documentsStore';
+import { ROOT_KEY, useDocumentsStore } from '../../store/documentsStore';
 import { documents as service } from '../../services/vault';
-import { DocumentPart } from '../../services/documentsService';
+import { DocumentPart, VaultDocument } from '../../services/documentsService';
 import { downloadFile, shareFile } from '../share/share';
-import { logger } from '../../services/logger';
 import { CaptureSource, pickFiles, suggestFilename } from '../capture/capture';
+import { logger } from '../../services/logger';
 import PartViewer from './PartViewer';
+import MoveTargetModal from './MoveTargetModal';
 import './DocumentDetailPage.css';
 
 type Props = RouteComponentProps<{ id: string }>;
 
 export default function DocumentDetailPage({ match, history }: Props) {
   const { id } = match.params;
-  const { items, load, addPart, removePart, remove } = useDocumentsStore();
-  const doc = useMemo(() => items.find((d) => d.id === id), [items, id]);
+  const invalidateForParent = useDocumentsStore((s) => s.invalidateForParent);
+  const invalidateLevel = useDocumentsStore((s) => s.invalidateLevel);
+  const storeDoc = useDocumentsStore((s) => {
+    for (const level of Object.values(s.levels)) {
+      const found = level.documents.find((d) => d.id === id);
+      if (found) return found;
+    }
+    return undefined;
+  });
+
+  const [doc, setDoc] = useState<VaultDocument | null>(null);
+  const [missing, setMissing] = useState(false);
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveFromKey, setMoveFromKey] = useState(ROOT_KEY);
   const [presentActionSheet] = useIonActionSheet();
   const [presentToast] = useIonToast();
 
+  // Initialise from the browse cache; deep links fetch the doc directly.
   useEffect(() => {
-    if (!doc) load();
+    if (doc && doc.id === id) return;
+    if (storeDoc) {
+      setDoc(storeDoc);
+      return;
+    }
+    service
+      .getDocument(id)
+      .then((d) => (d ? setDoc(d) : setMissing(true)))
+      .catch((e) => {
+        logger.error('Document fetch failed', e as Error);
+        setMissing(true);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc]);
+  }, [id, storeDoc]);
+
+  const toastError = (prefix: string, e: unknown) => {
+    if ((e as Error).name === 'AbortError') return; // user closed the share sheet
+    logger.error(prefix, e as Error);
+    presentToast({ message: `${prefix}: ${(e as Error).message}`, duration: 3000 });
+  };
+
+  const parentRoute = async (): Promise<string> => {
+    if (!doc) return '/documents';
+    const rootId = await service.ensureRoot();
+    return doc.parentId === rootId ? '/documents' : `/g/${doc.parentId}`;
+  };
+
+  if (missing) {
+    return (
+      <IonPage>
+        <IonHeader>
+          <IonToolbar>
+            <IonButtons slot="start">
+              <IonBackButton defaultHref="/documents" />
+            </IonButtons>
+            <IonTitle>Not found</IonTitle>
+          </IonToolbar>
+        </IonHeader>
+        <IonContent className="detail-center">
+          <p>This document no longer exists.</p>
+        </IonContent>
+      </IonPage>
+    );
+  }
 
   if (!doc) {
     return (
@@ -59,7 +115,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
     );
   }
 
-  const safeActive = Math.min(active, doc.parts.length - 1);
+  const safeActive = Math.min(active, Math.max(0, doc.parts.length - 1));
   const part: DocumentPart | undefined = doc.parts[safeActive];
 
   const withBlob = async (p: DocumentPart) => ({
@@ -67,12 +123,6 @@ export default function DocumentDetailPage({ match, history }: Props) {
     mimeType: p.mimeType,
     blob: await service.getPartBlob(p.id),
   });
-
-  const toastError = (prefix: string, e: unknown) => {
-    if ((e as Error).name === 'AbortError') return; // user closed the share sheet
-    logger.error(prefix, e as Error);
-    presentToast({ message: `${prefix}: ${(e as Error).message}`, duration: 3000 });
-  };
 
   const onDownload = async () => {
     if (!part) return;
@@ -108,8 +158,14 @@ export default function DocumentDetailPage({ match, history }: Props) {
       setBusy(true);
       try {
         const label = `Page ${doc.parts.length + 1}`;
-        await addPart(doc.id, { label, filename: suggestFilename(label, file), blob: file });
+        const newPart = await service.addPart(doc.id, {
+          label,
+          filename: suggestFilename(label, file),
+          blob: file,
+        });
+        setDoc({ ...doc, parts: [...doc.parts, newPart] });
         setActive(doc.parts.length);
+        invalidateForParent(doc.parentId);
       } catch (e) {
         toastError('Could not add the page', e);
       } finally {
@@ -128,6 +184,12 @@ export default function DocumentDetailPage({ match, history }: Props) {
       ],
     });
 
+  const openMove = async () => {
+    const rootId = await service.ensureRoot();
+    setMoveFromKey(doc.parentId === rootId ? ROOT_KEY : doc.parentId);
+    setMoveOpen(true);
+  };
+
   const onDeletePart = () => {
     if (!part) return;
     presentActionSheet({
@@ -139,8 +201,10 @@ export default function DocumentDetailPage({ match, history }: Props) {
           icon: trashOutline,
           handler: async () => {
             try {
-              await removePart(doc.id, part.id);
+              await service.deletePart(part.id);
+              setDoc({ ...doc, parts: doc.parts.filter((p) => p.id !== part.id) });
               setActive((i) => Math.max(0, i - 1));
+              invalidateForParent(doc.parentId);
             } catch (e) {
               toastError('Delete failed', e);
             }
@@ -156,14 +220,17 @@ export default function DocumentDetailPage({ match, history }: Props) {
       header: doc.title,
       buttons: [
         { text: 'Add page', icon: addOutline, handler: openAddPart },
+        { text: 'Move to…', icon: swapHorizontalOutline, handler: () => void openMove() },
         {
           text: 'Delete document',
           role: 'destructive',
           icon: trashOutline,
           handler: async () => {
             try {
-              await remove(doc.id);
-              history.replace('/documents');
+              const route = await parentRoute();
+              await service.deleteDocument(doc.id);
+              invalidateForParent(doc.parentId);
+              history.replace(route);
             } catch (e) {
               toastError('Delete failed', e);
             }
@@ -223,20 +290,35 @@ export default function DocumentDetailPage({ match, history }: Props) {
 
       <IonToolbar className="detail__actions">
         <div className="detail__actionbar">
-          <button onClick={onDownload} disabled={busy}>
+          <button onClick={onDownload} disabled={busy || !part}>
             <IonIcon icon={downloadOutline} />
             <span>Download</span>
           </button>
-          <button onClick={onShare} disabled={busy}>
+          <button onClick={onShare} disabled={busy || !part}>
             <IonIcon icon={shareSocialOutline} />
             <span>Share</span>
           </button>
-          <button className="danger" onClick={onDeletePart} disabled={busy}>
+          <button className="danger" onClick={onDeletePart} disabled={busy || !part}>
             <IonIcon icon={trashOutline} />
             <span>Delete</span>
           </button>
         </div>
       </IonToolbar>
+
+      <MoveTargetModal
+        isOpen={moveOpen}
+        movingId={doc.id}
+        movingName={doc.title}
+        fromKey={moveFromKey}
+        onDidDismiss={() => setMoveOpen(false)}
+        onMoved={async (toKey) => {
+          const rootId = await service.ensureRoot();
+          invalidateForParent(doc.parentId);
+          invalidateLevel(toKey);
+          setDoc({ ...doc, parentId: toKey === ROOT_KEY ? rootId : toKey });
+          presentToast({ message: 'Moved.', duration: 1500 });
+        }}
+      />
     </IonPage>
   );
 }

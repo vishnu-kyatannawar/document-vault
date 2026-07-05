@@ -10,6 +10,6 @@ import { clearThumbnailMemory } from './thumbnails';
 export async function resetLocalData(): Promise<void> {
   documents.invalidateRoot();
   clearThumbnailMemory();
-  useDocumentsStore.setState({ items: [], loading: false, error: null });
+  useDocumentsStore.setState({ levels: {}, groupNames: {} });
   await cacheClear();
 }

@@ -83,6 +83,17 @@ describe('driveClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('moveFile PATCHes with addParents/removeParents', async () => {
+    const fetchMock = mockFetch({ id: 'f1', parents: ['new'] });
+    const client = createDriveClient(getToken);
+    await client.moveFile('f1', 'old-parent', 'new-parent');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('addParents=new-parent');
+    expect(String(url)).toContain('removeParents=old-parent');
+    expect((init as RequestInit).method).toBe('PATCH');
+  });
+
   it('getFile returns null when the file no longer exists (404)', async () => {
     mockFetch({ error: 'gone' }, false, 404);
     const client = createDriveClient(getToken);

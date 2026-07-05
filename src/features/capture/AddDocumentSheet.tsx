@@ -38,11 +38,13 @@ interface StagedPart {
 
 interface Props {
   isOpen: boolean;
+  /** Level key ('root' or a group id) the document is created in. */
+  parentKey: string;
   onDidDismiss: () => void;
 }
 
-export default function AddDocumentSheet({ isOpen, onDidDismiss }: Props) {
-  const create = useDocumentsStore((s) => s.create);
+export default function AddDocumentSheet({ isOpen, parentKey, onDidDismiss }: Props) {
+  const create = useDocumentsStore((s) => s.createDocument);
   const [presentActionSheet] = useIonActionSheet();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -101,6 +103,7 @@ export default function AddDocumentSheet({ isOpen, onDidDismiss }: Props) {
     setError(null);
     try {
       await create(
+        parentKey,
         title.trim(),
         category,
         parts.map((p) => ({

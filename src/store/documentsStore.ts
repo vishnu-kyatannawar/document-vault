@@ -1,62 +1,141 @@
 import { create } from 'zustand';
-import { NewPart, VaultDocument } from '../services/documentsService';
+import { NewPart, VaultDocument, VaultGroup } from '../services/documentsService';
 import { documents as service } from '../services/vault';
 import { logger } from '../services/logger';
 
-interface DocumentsState {
-  items: VaultDocument[];
+/** Level key for the vault root (other levels are keyed by group id). */
+export const ROOT_KEY = 'root';
+
+const toParentId = (key: string): string | undefined =>
+  key === ROOT_KEY ? undefined : key;
+
+export interface LevelState {
+  groups: VaultGroup[];
+  documents: VaultDocument[];
   loading: boolean;
+  loaded: boolean;
   error: string | null;
-  load: () => Promise<void>;
-  create: (title: string, category: string, parts: NewPart[]) => Promise<void>;
-  addPart: (documentId: string, part: NewPart) => Promise<void>;
-  removePart: (documentId: string, fileId: string) => Promise<void>;
-  remove: (documentId: string) => Promise<void>;
 }
 
-export const useDocumentsStore = create<DocumentsState>((set, get) => ({
-  items: [],
+interface DocumentsState {
+  levels: Record<string, LevelState>;
+  /** Group display names for headers, filled as levels load. */
+  groupNames: Record<string, string>;
+  loadLevel: (key: string) => Promise<void>;
+  /** Mark a level stale so it reloads next time it is shown. */
+  invalidateLevel: (key: string) => void;
+  /** Invalidate by a Drive parent folder id (root id unknown → also root). */
+  invalidateForParent: (parentId: string) => void;
+  setGroupName: (id: string, name: string) => void;
+  createGroup: (key: string, name: string) => Promise<void>;
+  renameGroup: (key: string, id: string, name: string) => Promise<void>;
+  deleteGroup: (key: string, id: string) => Promise<void>;
+  createDocument: (
+    key: string,
+    title: string,
+    category: string,
+    parts: NewPart[],
+  ) => Promise<void>;
+  /** Move a doc/group between level keys ('root' or group ids). */
+  moveItem: (id: string, fromKey: string, toKey: string) => Promise<void>;
+}
+
+const emptyLevel: LevelState = {
+  groups: [],
+  documents: [],
   loading: false,
+  loaded: false,
   error: null,
+};
 
-  load: async () => {
-    set({ loading: true, error: null });
-    try {
-      const items = await service.listDocuments();
-      set({ items, loading: false });
-    } catch (e) {
-      logger.error('Documents load failed', e as Error);
-      set({ loading: false, error: (e as Error).message });
-    }
-  },
+export const useDocumentsStore = create<DocumentsState>((set, get) => {
+  const patchLevel = (key: string, patch: Partial<LevelState>) =>
+    set((s) => ({
+      levels: { ...s.levels, [key]: { ...(s.levels[key] ?? emptyLevel), ...patch } },
+    }));
 
-  create: async (title, category, parts) => {
-    const doc = await service.createDocument(title, category, parts);
-    set({ items: [doc, ...get().items] });
-  },
+  return {
+    levels: {},
+    groupNames: {},
 
-  addPart: async (documentId, part) => {
-    const newPart = await service.addPart(documentId, part);
-    set({
-      items: get().items.map((d) =>
-        d.id === documentId ? { ...d, parts: [...d.parts, newPart] } : d,
-      ),
-    });
-  },
+    loadLevel: async (key) => {
+      patchLevel(key, { loading: true, error: null });
+      try {
+        const level = await service.listLevel(toParentId(key));
+        const names = Object.fromEntries(level.groups.map((g) => [g.id, g.name]));
+        set((s) => ({ groupNames: { ...s.groupNames, ...names } }));
+        patchLevel(key, {
+          groups: level.groups,
+          documents: level.documents,
+          loading: false,
+          loaded: true,
+        });
+      } catch (e) {
+        logger.error(`Level load failed (${key})`, e as Error);
+        patchLevel(key, { loading: false, error: (e as Error).message });
+      }
+    },
 
-  removePart: async (documentId, fileId) => {
-    await service.deletePart(fileId);
-    set({
-      items: get().items.map((d) =>
-        d.id === documentId
-          ? { ...d, parts: d.parts.filter((p) => p.id !== fileId) }
-          : d,
-      ),
-    });
-  },
+    invalidateLevel: (key) => {
+      const level = get().levels[key];
+      if (level) patchLevel(key, { loaded: false });
+    },
 
-  remove: async (documentId) => {
-    await service.deleteDocument(documentId);
-    set({ items: get().items.filter((d) => d.id !== documentId) });
-  },
-}));
+    invalidateForParent: (parentId) => {
+      const { invalidateLevel } = get();
+      invalidateLevel(parentId);
+      // The root level is keyed 'root', not by its Drive id — when the parent
+      // id is unknown to us it may be the root, so invalidate that too.
+      if (!get().levels[parentId]) invalidateLevel(ROOT_KEY);
+    },
+
+    setGroupName: (id, name) =>
+      set((s) => ({ groupNames: { ...s.groupNames, [id]: name } })),
+
+    createGroup: async (key, name) => {
+      const group = await service.createGroup(name.trim(), toParentId(key));
+      get().setGroupName(group.id, group.name);
+      const level = get().levels[key] ?? emptyLevel;
+      patchLevel(key, {
+        groups: [...level.groups, group].sort((a, b) => a.name.localeCompare(b.name)),
+      });
+    },
+
+    renameGroup: async (key, id, name) => {
+      await service.renameGroup(id, name.trim());
+      get().setGroupName(id, name.trim());
+      const level = get().levels[key] ?? emptyLevel;
+      patchLevel(key, {
+        groups: level.groups
+          .map((g) => (g.id === id ? { ...g, name: name.trim() } : g))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      });
+    },
+
+    deleteGroup: async (key, id) => {
+      await service.deleteGroupIfEmpty(id);
+      const level = get().levels[key] ?? emptyLevel;
+      patchLevel(key, { groups: level.groups.filter((g) => g.id !== id) });
+    },
+
+    createDocument: async (key, title, category, parts) => {
+      const doc = await service.createDocument(title, category, parts, toParentId(key));
+      const level = get().levels[key] ?? emptyLevel;
+      patchLevel(key, { documents: [doc, ...level.documents] });
+    },
+
+    moveItem: async (id, fromKey, toKey) => {
+      await service.moveItem(id, toParentId(fromKey), toParentId(toKey));
+      const { levels, invalidateLevel } = get();
+      const from = levels[fromKey];
+      if (from) {
+        // Optimistically remove from the source so the UI updates instantly.
+        patchLevel(fromKey, {
+          groups: from.groups.filter((g) => g.id !== id),
+          documents: from.documents.filter((d) => d.id !== id),
+        });
+      }
+      invalidateLevel(toKey);
+    },
+  };
+});

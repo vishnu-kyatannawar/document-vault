@@ -80,6 +80,76 @@
   margin-top: 10px;
 }
 
+/* Group rows (folders) */
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 0;
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px;
+  border-radius: var(--app-radius-md);
+  border: var(--app-hairline);
+  background: var(--ion-card-background);
+  box-shadow: var(--app-shadow-sm);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.group-row:active {
+  transform: scale(0.985);
+}
+
+.group-row__icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--app-accent-soft);
+}
+.group-row__icon ion-icon {
+  font-size: 21px;
+  color: var(--app-accent);
+}
+
+.group-row__name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-row__more {
+  --padding-start: 6px;
+  --padding-end: 6px;
+  margin: 0;
+  color: var(--ion-color-step-400);
+}
+
+.group-row__chevron {
+  color: var(--ion-color-step-300);
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.search-hint {
+  margin: 12px 18px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ion-color-step-400);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .docs-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
