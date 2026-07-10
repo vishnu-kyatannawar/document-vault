@@ -1,0 +1,151 @@
+.profile-sheet {
+  --border-radius: 22px 22px 0 0;
+}
+
+.profile-sheet__body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 22px 18px calc(14px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+
+/* Account header */
+.profile-sheet__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 2px 4px 18px;
+}
+.profile-sheet__avatar {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #12b981, #0c8b60);
+  color: #fff;
+  font-weight: 700;
+  font-size: 21px;
+}
+.profile-sheet__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-sheet__who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.profile-sheet__who strong {
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.profile-sheet__who small {
+  font-size: 13px;
+  color: var(--ion-color-step-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Action rows */
+.profile-sheet__list {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--app-radius-md);
+  border: var(--app-hairline);
+  background: var(--ion-card-background);
+  box-shadow: var(--app-shadow-sm);
+  overflow: hidden;
+}
+
+.profile-sheet__row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 13px 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: var(--app-hairline);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.profile-sheet__row:last-child {
+  border-bottom: 0;
+}
+.profile-sheet__row:active {
+  background: var(--ion-color-step-50);
+}
+.profile-sheet__row:disabled {
+  opacity: 0.55;
+}
+
+.profile-sheet__row-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: var(--app-accent-soft);
+}
+.profile-sheet__row-icon ion-icon {
+  font-size: 19px;
+  color: var(--app-accent);
+}
+.profile-sheet__row-icon ion-spinner {
+  width: 18px;
+  height: 18px;
+  --color: var(--app-accent);
+}
+
+.profile-sheet__row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.profile-sheet__row-text span {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ion-text-color);
+}
+.profile-sheet__row-text small {
+  font-size: 12.5px;
+  color: var(--ion-color-step-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-sheet__row-chevron {
+  flex-shrink: 0;
+  font-size: 16px;
+  color: var(--ion-color-step-300);
+}
+
+.profile-sheet__row.danger .profile-sheet__row-icon {
+  background: rgba(229, 72, 77, 0.1);
+}
+.profile-sheet__row.danger .profile-sheet__row-icon ion-icon {
+  color: var(--ion-color-danger);
+}
+.profile-sheet__row.danger .profile-sheet__row-text span {
+  color: var(--ion-color-danger);
+}
+
+.profile-sheet__version {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ion-color-step-400);
+}

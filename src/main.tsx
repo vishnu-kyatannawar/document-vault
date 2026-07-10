@@ -2,7 +2,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { setupIonicReact } from '@ionic/react';
 import App from './App';
-import { initLogger } from './services/logger';
+import { initLogger, logger } from './services/logger';
+import { APP_VERSION, BUILD_DATE, initAppUpdates } from './services/appUpdate';
 
 /* Ionic core + basic CSS */
 import '@ionic/react/css/core.css';
@@ -17,6 +18,8 @@ import '@ionic/react/css/text-alignment.css';
 import './theme/variables.css';
 
 initLogger();
+logger.info(`app v${APP_VERSION} (${BUILD_DATE})`);
+initAppUpdates();
 setupIonicReact({ mode: 'ios' });
 
 createRoot(document.getElementById('root')!).render(

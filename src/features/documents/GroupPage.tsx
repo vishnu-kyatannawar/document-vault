@@ -10,7 +10,6 @@ import {
   IonHeader,
   IonIcon,
   IonPage,
-  IonPopover,
   IonRefresher,
   IonRefresherContent,
   IonSearchbar,
@@ -27,16 +26,12 @@ import {
 import {
   add,
   alertCircleOutline,
-  archiveOutline,
-  bugOutline,
   chevronForward,
-  cloudDownloadOutline,
   documentOutline,
   documentsOutline,
   ellipsisHorizontal,
   folderOpenOutline,
   folderOutline,
-  logOutOutline,
   pencilOutline,
   shareOutline,
   shieldCheckmark,
@@ -50,12 +45,13 @@ import { ROOT_KEY, useDocumentsStore } from '../../store/documentsStore';
 import { documents as service } from '../../services/vault';
 import { VaultDocument, VaultGroup, expiryInfo } from '../../services/documentsService';
 import { resetLocalData } from '../../services/session';
-import { downloadLogs, logger } from '../../services/logger';
+import { logger } from '../../services/logger';
 import DocumentCard from './DocumentCard';
 import AddDocumentSheet from '../capture/AddDocumentSheet';
 import MoveTargetModal from './MoveTargetModal';
 import ExportSheet from '../transfer/ExportSheet';
 import ImportModal from '../transfer/ImportModal';
+import ProfileSheet from '../profile/ProfileSheet';
 import type { ExportSource } from '../../services/transferService';
 import './DocumentsPage.css';
 
@@ -82,6 +78,7 @@ export default function GroupPage({ match }: Props) {
   const [moving, setMoving] = useState<VaultGroup | null>(null);
   const [exportSource, setExportSource] = useState<ExportSource | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const [presentActionSheet] = useIonActionSheet();
   const [presentAlert] = useIonAlert();
@@ -257,7 +254,7 @@ export default function GroupPage({ match }: Props) {
           </IonTitle>
           {isRoot && (
             <IonButtons slot="end">
-              <IonButton id="profile-trigger">
+              <IonButton onClick={() => setProfileOpen(true)}>
                 <IonAvatar className="topbar-avatar">
                   {profile?.picture ? (
                     <img src={profile.picture} alt={profile.name} referrerPolicy="no-referrer" />
@@ -266,32 +263,6 @@ export default function GroupPage({ match }: Props) {
                   )}
                 </IonAvatar>
               </IonButton>
-              <IonPopover trigger="profile-trigger" dismissOnSelect>
-                <div className="profile-pop">
-                  <strong>{profile?.name}</strong>
-                  <small>{profile?.email}</small>
-                  <IonButton
-                    fill="clear"
-                    size="small"
-                    onClick={() => setExportSource({ kind: 'vault' })}
-                  >
-                    <IonIcon slot="start" icon={archiveOutline} />
-                    Back up everything
-                  </IonButton>
-                  <IonButton fill="clear" size="small" onClick={() => setImportOpen(true)}>
-                    <IonIcon slot="start" icon={cloudDownloadOutline} />
-                    Import backup…
-                  </IonButton>
-                  <IonButton fill="clear" size="small" onClick={() => downloadLogs()}>
-                    <IonIcon slot="start" icon={bugOutline} />
-                    Download logs
-                  </IonButton>
-                  <IonButton fill="clear" size="small" onClick={handleSignOut}>
-                    <IonIcon slot="start" icon={logOutOutline} />
-                    Sign out
-                  </IonButton>
-                </div>
-              </IonPopover>
             </IonButtons>
           )}
         </IonToolbar>
@@ -461,6 +432,14 @@ export default function GroupPage({ match }: Props) {
       />
 
       <ImportModal isOpen={importOpen} onDidDismiss={() => setImportOpen(false)} />
+
+      <ProfileSheet
+        isOpen={profileOpen}
+        onDidDismiss={() => setProfileOpen(false)}
+        onBackup={() => setExportSource({ kind: 'vault' })}
+        onImport={() => setImportOpen(true)}
+        onSignOut={handleSignOut}
+      />
     </IonPage>
   );
 }

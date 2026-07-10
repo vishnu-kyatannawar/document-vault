@@ -1,7 +1,7 @@
 {
   "name": "document-vault",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Personal document vault PWA backed by Google Drive.",
   "scripts": {
@@ -38,6 +38,7 @@
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vite-plugin-pwa": "^0.21.1",
-    "vitest": "^3.0.5"
+    "vitest": "^3.0.5",
+    "workbox-window": "^7.4.1"
   }
 }
