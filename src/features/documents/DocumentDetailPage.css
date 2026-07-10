@@ -42,9 +42,16 @@
   transition: all 0.15s ease;
 }
 .detail__tab.active {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--app-accent);
   border-color: var(--app-accent);
   color: #fff;
+}
+.detail__tab.active ion-icon {
+  font-size: 13px;
+  opacity: 0.85;
 }
 
 /* Expiry / notes chips under the header */

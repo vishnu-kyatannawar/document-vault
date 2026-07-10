@@ -290,6 +290,20 @@ describe('documentsService', () => {
     });
   });
 
+  it('renames a page (part label)', async () => {
+    const { client } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const doc = await svc.createDocument('Aadhaar', [
+      { label: 'Page 1', filename: 'a.jpg', blob: new Blob(['1']) },
+      { label: 'Page 2', filename: 'b.jpg', blob: new Blob(['2']) },
+    ]);
+
+    await svc.renamePart(doc.parts[0].id, 'Front side');
+
+    const fresh = await svc.getDocument(doc.id);
+    expect(fresh?.parts.map((p) => p.label)).toEqual(['Front side', 'Page 2']);
+  });
+
   it('renames a document (folder name + title property)', async () => {
     const { client, files } = fakeDrive();
     const svc = createDocumentsService(client);

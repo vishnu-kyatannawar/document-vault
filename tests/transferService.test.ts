@@ -102,6 +102,7 @@ function fakeVault() {
     async addPart(): Promise<never> {
       throw new Error('unused');
     },
+    async renamePart() {},
     async deletePart() {},
     async deleteDocument() {},
     async moveItem() {},

@@ -218,6 +218,34 @@ export default function DocumentDetailPage({ match, history }: Props) {
       ],
     });
 
+  const promptRenamePage = (p: DocumentPart) =>
+    presentAlert({
+      header: 'Rename page',
+      inputs: [{ name: 'label', type: 'text', value: p.label }],
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Rename',
+          handler: (values: { label?: string }) => {
+            const label = values.label?.trim();
+            if (!label) return false;
+            service
+              .renamePart(p.id, label)
+              .then(() => {
+                setDoc((d) =>
+                  d
+                    ? { ...d, parts: d.parts.map((x) => (x.id === p.id ? { ...x, label } : x)) }
+                    : d,
+                );
+                invalidateForParent(doc.parentId);
+              })
+              .catch((e) => toastError('Rename failed', e));
+            return true;
+          },
+        },
+      ],
+    });
+
   const openMove = async () => {
     const rootId = await service.ensureRoot();
     setMoveFromKey(doc.parentId === rootId ? ROOT_KEY : doc.parentId);
@@ -327,16 +355,30 @@ export default function DocumentDetailPage({ match, history }: Props) {
                 <button
                   key={p.id}
                   className={`detail__tab ${i === safeActive ? 'active' : ''}`}
-                  onClick={() => setActive(i)}
+                  // Tap the current page's pill again to rename it.
+                  onClick={() => (i === safeActive ? void promptRenamePage(p) : setActive(i))}
                 >
                   {p.label}
+                  {i === safeActive && <IonIcon icon={createOutline} />}
                 </button>
               ))}
             </div>
           )}
 
           <div className="detail__stage">
-            {part && <PartViewer key={part.id} part={part} />}
+            {part && (
+              <PartViewer
+                key={part.id}
+                part={part}
+                onSwipe={(dir) =>
+                  setActive((i) =>
+                    dir === 'left'
+                      ? Math.min(i + 1, doc.parts.length - 1)
+                      : Math.max(i - 1, 0),
+                  )
+                }
+              />
+            )}
           </div>
         </div>
       </IonContent>

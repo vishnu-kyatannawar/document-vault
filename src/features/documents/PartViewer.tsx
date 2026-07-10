@@ -86,13 +86,23 @@ function PdfPages({
 }
 
 /** A single document part (image or PDF) with pinch / double-tap / wheel zoom. */
-export default function PartViewer({ part }: { part: DocumentPart }) {
+export default function PartViewer({
+  part,
+  onSwipe,
+}: {
+  part: DocumentPart;
+  /** Horizontal swipe while NOT zoomed in — used to flip between pages. */
+  onSwipe?: (dir: 'left' | 'right') => void;
+}) {
   const [blob, setBlob] = useState<Blob | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Settled zoom level — drives PDF re-rendering for crisp zoomed pages.
   const [zoom, setZoom] = useState(1);
+  // Live scale + touch bookkeeping for the page-flip swipe.
+  const scaleRef = useRef(1);
+  const touchRef = useRef<{ x: number; y: number; t: number; multi: boolean } | null>(null);
   const isPdf = part.mimeType === 'application/pdf';
 
   useEffect(() => {
@@ -127,8 +137,39 @@ export default function PartViewer({ part }: { part: DocumentPart }) {
 
   if (error) return <div className="pv-msg">Failed to load: {error}</div>;
 
+  // Page-flip swipe: only when fully zoomed out (zoomed-in drags are panning),
+  // single-finger, mostly horizontal, quick and long enough to be deliberate.
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      t: Date.now(),
+      multi: e.touches.length > 1,
+    };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (touchRef.current && e.touches.length > 1) touchRef.current.multi = true;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    if (!start || start.multi || !onSwipe || scaleRef.current > 1.05) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Date.now() - start.t > 600) return;
+    if (Math.abs(dx) < 64 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    onSwipe(dx < 0 ? 'left' : 'right');
+  };
+
   return (
-    <div className="pv">
+    <div
+      className="pv"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
       {!ready && (
         <div className="pv-msg pv-loading">
           <IonSpinner name="crescent" />
@@ -143,6 +184,9 @@ export default function PartViewer({ part }: { part: DocumentPart }) {
           wheel={{ step: 0.15 }}
           pinch={{ step: 5 }}
           centerZoomedOut
+          onTransform={(ref) => {
+            scaleRef.current = ref.state.scale;
+          }}
           onZoomStop={(ref) => setZoom(ref.state.scale)}
           onWheelStop={(ref) => setZoom(ref.state.scale)}
         >

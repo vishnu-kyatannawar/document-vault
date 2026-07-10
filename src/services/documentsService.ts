@@ -116,6 +116,8 @@ export interface DocumentsService {
   /** Fetch a single document by id (deep links), or null if gone. */
   getDocument(id: string): Promise<VaultDocument | null>;
   addPart(documentId: string, part: NewPart): Promise<DocumentPart>;
+  /** Rename a page's display label. */
+  renamePart(fileId: string, label: string): Promise<void>;
   deletePart(fileId: string): Promise<void>;
   deleteDocument(documentId: string): Promise<void>;
   getPartBlob(fileId: string): Promise<Blob>;
@@ -333,6 +335,10 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
         label: part.label,
       });
       return toPart(file);
+    },
+
+    renamePart(fileId, label) {
+      return drive.updateAppProperties(fileId, { label });
     },
 
     deletePart(fileId) {
