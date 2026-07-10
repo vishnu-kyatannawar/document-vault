@@ -290,7 +290,9 @@ export default function DocumentDetailPage({ match, history }: Props) {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent fullscreen scrollY={false} className="detail">
+      {/* NOT fullscreen: fullscreen slides content under the translucent
+          header, hiding the part tabs and meta chips. */}
+      <IonContent scrollY={false} className="detail">
         <div className="detail__layout">
           {(expiryLabel || doc.notes) && (
             <div className="detail__meta">

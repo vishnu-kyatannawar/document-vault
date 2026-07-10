@@ -20,7 +20,10 @@ function fakeDrive() {
       );
     },
     async listChildren(parentId) {
-      return [...files.values()].filter((f) => f.parents?.[0] === parentId);
+      // Real Drive queries order by createdTime desc (newest first).
+      return [...files.values()]
+        .filter((f) => f.parents?.[0] === parentId)
+        .sort((a, b) => (b.createdTime ?? '').localeCompare(a.createdTime ?? ''));
     },
     async listByAppProperty(key, value) {
       return [...files.values()].filter(
@@ -79,6 +82,7 @@ function fakeDrive() {
         mimeType: 'image/jpeg',
         parents: [parentId],
         appProperties,
+        createdTime: new Date(1_700_000_000_000 + seq * 1000).toISOString(),
       };
       files.set(f.id, f);
       return f;

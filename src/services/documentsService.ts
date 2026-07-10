@@ -192,6 +192,9 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
 
   async function docWithParts(folder: DriveFile, parentId: string): Promise<VaultDocument> {
     const children = await drive.listChildren(folder.id);
+    // Drive lists newest-first; pages should read in the order they were added
+    // (page 1 first — it is also the cover thumbnail).
+    children.sort((a, b) => (a.createdTime ?? '').localeCompare(b.createdTime ?? ''));
     return toDoc(folder, children.map(toPart), parentId);
   }
 
