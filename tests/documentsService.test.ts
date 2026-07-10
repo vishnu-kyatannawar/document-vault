@@ -53,6 +53,7 @@ function fakeDrive() {
     async updateFileMeta(fileId, meta) {
       const f = files.get(fileId);
       if (!f) return;
+      if (meta.name !== undefined) f.name = meta.name;
       if (meta.description !== undefined) f.description = meta.description;
       if (meta.appProperties) {
         const merged = { ...f.appProperties };
@@ -283,6 +284,20 @@ describe('documentsService', () => {
       remindDays: 30,
       notes: 'Policy #123',
     });
+  });
+
+  it('renames a document (folder name + title property)', async () => {
+    const { client, files } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const doc = await svc.createDocument('anita aadhar', [
+      { label: 'Front', filename: 'f.jpg', blob: new Blob(['1']) },
+    ]);
+
+    await svc.renameDocument(doc.id, 'Anita Aadhaar');
+
+    const level = await svc.listLevel();
+    expect(level.documents[0].title).toBe('Anita Aadhaar');
+    expect(files.get(doc.id)?.name).toBe('Anita Aadhaar'); // Drive folder too
   });
 
   it('updateDocumentMeta updates and clears metadata', async () => {

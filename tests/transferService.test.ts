@@ -90,6 +90,7 @@ function fakeVault() {
     },
     // Unused by the transfer layer:
     async renameGroup() {},
+    async renameDocument() {},
     async deleteGroup() {},
     async countContents() {
       return { docs: 0, groups: 0 };

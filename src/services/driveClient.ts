@@ -37,12 +37,16 @@ export interface DriveClient {
     description?: string,
   ): Promise<DriveFile>;
   /**
-   * Patch description and/or appProperties. A property value of `null`
+   * Patch name, description and/or appProperties. A property value of `null`
    * deletes that key (Drive semantics).
    */
   updateFileMeta(
     id: string,
-    meta: { description?: string; appProperties?: Record<string, string | null> },
+    meta: {
+      name?: string;
+      description?: string;
+      appProperties?: Record<string, string | null>;
+    },
   ): Promise<void>;
   uploadFile(
     parentId: string,

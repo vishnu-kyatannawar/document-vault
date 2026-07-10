@@ -28,12 +28,13 @@ interface Props {
   isOpen: boolean;
   doc: VaultDocument;
   onDidDismiss: () => void;
-  /** Persist and report the new metadata; may throw. */
-  onSave: (meta: DocMeta) => Promise<void>;
+  /** Persist and report the new title + metadata; may throw. */
+  onSave: (title: string, meta: DocMeta) => Promise<void>;
 }
 
-/** Edit a document's expiry date, reminder window and notes. */
+/** Edit a document's name, expiry date, reminder window and notes. */
 export default function EditDetailsModal({ isOpen, doc, onDidDismiss, onSave }: Props) {
+  const [title, setTitle] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [remindDays, setRemindDays] = useState(DEFAULT_REMIND_DAYS);
   const [notes, setNotes] = useState('');
@@ -42,6 +43,7 @@ export default function EditDetailsModal({ isOpen, doc, onDidDismiss, onSave }: 
 
   useEffect(() => {
     if (!isOpen) return;
+    setTitle(doc.title);
     setExpiresAt(doc.expiresAt ?? '');
     setRemindDays(doc.remindDays ?? DEFAULT_REMIND_DAYS);
     setNotes(doc.notes ?? '');
@@ -50,10 +52,15 @@ export default function EditDetailsModal({ isOpen, doc, onDidDismiss, onSave }: 
   }, [isOpen, doc]);
 
   const save = async () => {
+    const name = title.trim();
+    if (!name) {
+      setError('Name can’t be empty.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await onSave({
+      await onSave(name, {
         expiresAt: expiresAt || undefined,
         remindDays: expiresAt ? remindDays : undefined,
         notes: notes.trim() || undefined,
@@ -85,6 +92,16 @@ export default function EditDetailsModal({ isOpen, doc, onDidDismiss, onSave }: 
 
       <IonContent className="ion-padding">
         <IonList inset>
+          <IonItem>
+            <IonInput
+              label="Name"
+              labelPlacement="stacked"
+              type="text"
+              value={title}
+              placeholder="e.g. Anita Aadhaar"
+              onIonInput={(e) => setTitle(e.detail.value ?? '')}
+            />
+          </IonItem>
           <IonItem>
             <IonInput
               label="Expiry date"

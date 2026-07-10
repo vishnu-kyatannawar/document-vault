@@ -107,6 +107,8 @@ export interface DocumentsService {
     parentId?: string,
     meta?: DocMeta,
   ): Promise<VaultDocument>;
+  /** Rename a document (Drive folder name + title property together). */
+  renameDocument(id: string, title: string): Promise<void>;
   /** Update (or clear) a document's expiry/reminder/notes. */
   updateDocumentMeta(id: string, meta: DocMeta): Promise<void>;
   /** All documents (any depth) that are expired or inside their reminder window. */
@@ -288,6 +290,12 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
         parts: uploaded.map(toPart),
         parentId: pid,
       };
+    },
+
+    async renameDocument(id, title) {
+      // Title is read from appProperties first — keep folder name in sync so
+      // the document also looks right in the Drive UI.
+      await drive.updateFileMeta(id, { name: title, appProperties: { title } });
     },
 
     async updateDocumentMeta(id, meta) {

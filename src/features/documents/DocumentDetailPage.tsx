@@ -368,10 +368,12 @@ export default function DocumentDetailPage({ match, history }: Props) {
         isOpen={editOpen}
         doc={doc}
         onDidDismiss={() => setEditOpen(false)}
-        onSave={async (meta) => {
+        onSave={async (title, meta) => {
+          if (title !== doc.title) await service.renameDocument(doc.id, title);
           await service.updateDocumentMeta(doc.id, meta);
           setDoc({
             ...doc,
+            title,
             expiresAt: meta.expiresAt,
             remindDays: meta.remindDays,
             notes: meta.notes,
