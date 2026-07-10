@@ -97,8 +97,10 @@ export interface DocumentsService {
   getGroup(id: string): Promise<VaultGroup | null>;
   createGroup(name: string, parentId?: string): Promise<VaultGroup>;
   renameGroup(id: string, name: string): Promise<void>;
-  /** Deletes a group only when it has no contents; throws otherwise. */
-  deleteGroupIfEmpty(id: string): Promise<void>;
+  /** Recursive tally of what lives inside a group (for delete warnings). */
+  countContents(id: string): Promise<{ docs: number; groups: number }>;
+  /** Deletes a group AND everything inside it (Drive cascades the folder). */
+  deleteGroup(id: string): Promise<void>;
   createDocument(
     title: string,
     parts: NewPart[],
@@ -244,12 +246,26 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       return drive.renameFile(id, name);
     },
 
-    async deleteGroupIfEmpty(id) {
-      const children = await drive.listChildren(id);
-      if (children.length > 0) {
-        throw new Error('Group is not empty — move or delete its contents first.');
-      }
-      await drive.deleteFile(id);
+    async countContents(id) {
+      let docs = 0;
+      let groups = 0;
+      const walk = async (pid: string): Promise<void> => {
+        const folders = await drive.listFolders(pid);
+        for (const f of folders) {
+          if (classify(f) === 'doc') docs += 1;
+          else {
+            groups += 1;
+            await walk(f.id);
+          }
+        }
+      };
+      await walk(id);
+      return { docs, groups };
+    },
+
+    deleteGroup(id) {
+      // Drive deletes the folder's entire subtree with it.
+      return drive.deleteFile(id);
     },
 
     async createDocument(title, parts, parentId, meta) {

@@ -113,7 +113,7 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => {
     },
 
     deleteGroup: async (key, id) => {
-      await service.deleteGroupIfEmpty(id);
+      await service.deleteGroup(id);
       const level = get().levels[key] ?? emptyLevel;
       patchLevel(key, { groups: level.groups.filter((g) => g.id !== id) });
     },

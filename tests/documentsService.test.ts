@@ -188,7 +188,28 @@ describe('documentsService', () => {
     expect(root.documents).toHaveLength(0);
   });
 
-  it('refuses to delete a non-empty group but deletes an empty one', async () => {
+  it('counts nested documents and groups inside a group', async () => {
+    const { client } = fakeDrive();
+    const svc = createDocumentsService(client);
+    const house = await svc.createGroup('House');
+    const papers = await svc.createGroup('Papers', house.id);
+    await svc.createDocument('Deed',
+      [{ label: 'Deed', filename: 'd.pdf', blob: new Blob(['1']) }],
+      house.id,
+    );
+    await svc.createDocument('Tax',
+      [{ label: 'Tax', filename: 't.pdf', blob: new Blob(['1']) }],
+      papers.id,
+    );
+
+    expect(await svc.countContents(house.id)).toEqual({ docs: 2, groups: 1 });
+    expect(await svc.countContents(papers.id)).toEqual({ docs: 1, groups: 0 });
+
+    const empty = await svc.createGroup('Empty');
+    expect(await svc.countContents(empty.id)).toEqual({ docs: 0, groups: 0 });
+  });
+
+  it('deletes a group together with everything inside it', async () => {
     const { client, files } = fakeDrive();
     const svc = createDocumentsService(client);
     const group = await svc.createGroup('House');
@@ -197,12 +218,8 @@ describe('documentsService', () => {
       group.id,
     );
 
-    await expect(svc.deleteGroupIfEmpty(group.id)).rejects.toThrow(/not empty/i);
-    expect(files.has(group.id)).toBe(true);
-
-    const empty = await svc.createGroup('Empty');
-    await svc.deleteGroupIfEmpty(empty.id);
-    expect(files.has(empty.id)).toBe(false);
+    await svc.deleteGroup(group.id);
+    expect(files.has(group.id)).toBe(false);
   });
 
   it('moves a document between groups', async () => {

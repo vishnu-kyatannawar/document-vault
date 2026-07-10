@@ -172,17 +172,32 @@
   white-space: nowrap;
 }
 
-.group-row__more {
-  --padding-start: 6px;
-  --padding-end: 6px;
-  margin: 0;
-  color: var(--ion-color-step-400);
-}
-
-.group-row__chevron {
-  color: var(--ion-color-step-300);
-  font-size: 17px;
+/* Inline quick actions on a group row (rename/move/export/delete). */
+.group-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex-shrink: 0;
+}
+.group-row__actions button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ion-color-step-450, var(--ion-color-step-400));
+  cursor: pointer;
+}
+.group-row__actions button ion-icon {
+  font-size: 17px;
+}
+.group-row__actions button:active {
+  background: var(--ion-color-step-100);
+}
+.group-row__actions button.danger {
+  color: var(--ion-color-danger);
 }
 
 .search-hint {

@@ -145,3 +145,14 @@ button.detail__chip--notes {
 .detail__actionbar button:disabled {
   opacity: 0.4;
 }
+
+/* Five actions need tighter cells on narrow phones. */
+.detail__actionbar--five button {
+  padding: 6px 6px;
+  font-size: 10.5px;
+  flex: 1;
+  min-width: 0;
+}
+.detail__actionbar--five button ion-icon {
+  font-size: 21px;
+}

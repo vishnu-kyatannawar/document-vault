@@ -26,10 +26,8 @@ import {
 import {
   add,
   alertCircleOutline,
-  chevronForward,
   documentOutline,
   documentsOutline,
-  ellipsisHorizontal,
   folderOpenOutline,
   folderOutline,
   pencilOutline,
@@ -172,59 +170,58 @@ export default function GroupPage({ match }: Props) {
       ],
     });
 
-  const groupActions = (group: VaultGroup) =>
-    presentActionSheet({
-      header: group.name,
+  const promptRenameGroup = (group: VaultGroup) =>
+    presentAlert({
+      header: 'Rename group',
+      inputs: [{ name: 'name', type: 'text', value: group.name }],
       buttons: [
+        { text: 'Cancel', role: 'cancel' },
         {
           text: 'Rename',
-          icon: pencilOutline,
-          handler: () =>
-            void presentAlert({
-              header: 'Rename group',
-              inputs: [{ name: 'name', type: 'text', value: group.name }],
-              buttons: [
-                { text: 'Cancel', role: 'cancel' },
-                {
-                  text: 'Rename',
-                  handler: (values: { name?: string }) => {
-                    const name = values.name?.trim();
-                    if (!name) return false;
-                    renameGroup(levelKey, group.id, name).catch((e) =>
-                      presentToast({
-                        message: `Rename failed: ${(e as Error).message}`,
-                        duration: 3000,
-                      }),
-                    );
-                    return true;
-                  },
-                },
-              ],
-            }),
+          handler: (values: { name?: string }) => {
+            const name = values.name?.trim();
+            if (!name) return false;
+            renameGroup(levelKey, group.id, name).catch((e) =>
+              presentToast({
+                message: `Rename failed: ${(e as Error).message}`,
+                duration: 3000,
+              }),
+            );
+            return true;
+          },
         },
+      ],
+    });
+
+  // Deletes the whole subtree — warn with what's inside before committing.
+  const confirmDeleteGroup = async (group: VaultGroup) => {
+    const counts = await service.countContents(group.id).catch(() => null);
+    const hasContents = counts !== null && counts.docs + counts.groups > 0;
+    const contentsLine = !counts
+      ? 'Everything inside will be deleted too.'
+      : hasContents
+        ? `It contains ${counts.docs} document${counts.docs === 1 ? '' : 's'}` +
+          (counts.groups > 0
+            ? ` and ${counts.groups} group${counts.groups === 1 ? '' : 's'}`
+            : '') +
+          '. Everything inside will be deleted.'
+        : 'This group is empty.';
+    presentAlert({
+      header: `Delete “${group.name}”?`,
+      message: `${contentsLine} This cannot be undone.`,
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
         {
-          text: 'Move…',
-          icon: swapHorizontalOutline,
-          handler: () => setMoving(group),
-        },
-        {
-          text: 'Export',
-          icon: shareOutline,
-          handler: () =>
-            setExportSource({ kind: 'group', id: group.id, name: group.name }),
-        },
-        {
-          text: 'Delete',
+          text: hasContents ? 'Delete everything' : 'Delete',
           role: 'destructive',
-          icon: trashOutline,
           handler: () =>
             void deleteGroup(levelKey, group.id).catch((e) =>
               presentToast({ message: (e as Error).message, duration: 3500 }),
             ),
         },
-        { text: 'Cancel', role: 'cancel' },
       ],
     });
+  };
 
   const showSearch = results !== null;
   const groups = level?.groups ?? [];
@@ -367,18 +364,45 @@ export default function GroupPage({ match }: Props) {
                       <IonIcon icon={folderOpenOutline} />
                     </span>
                     <span className="group-row__name">{group.name}</span>
-                    <IonButton
-                      fill="clear"
-                      size="small"
-                      className="group-row__more"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        groupActions(group);
-                      }}
-                    >
-                      <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
-                    </IonButton>
-                    <IonIcon className="group-row__chevron" icon={chevronForward} />
+                    <span className="group-row__actions">
+                      <button
+                        aria-label={`Rename ${group.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void promptRenameGroup(group);
+                        }}
+                      >
+                        <IonIcon icon={pencilOutline} />
+                      </button>
+                      <button
+                        aria-label={`Move ${group.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMoving(group);
+                        }}
+                      >
+                        <IonIcon icon={swapHorizontalOutline} />
+                      </button>
+                      <button
+                        aria-label={`Export ${group.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExportSource({ kind: 'group', id: group.id, name: group.name });
+                        }}
+                      >
+                        <IonIcon icon={shareOutline} />
+                      </button>
+                      <button
+                        className="danger"
+                        aria-label={`Delete ${group.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void confirmDeleteGroup(group);
+                        }}
+                      >
+                        <IonIcon icon={trashOutline} />
+                      </button>
+                    </span>
                   </div>
                 ))}
               </div>

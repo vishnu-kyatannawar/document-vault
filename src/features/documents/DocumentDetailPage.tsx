@@ -21,7 +21,6 @@ import {
   documentAttachOutline,
   documentTextOutline,
   downloadOutline,
-  ellipsisVertical,
   imagesOutline,
   shareOutline,
   shareSocialOutline,
@@ -225,57 +224,52 @@ export default function DocumentDetailPage({ match, history }: Props) {
     setMoveOpen(true);
   };
 
-  const onDeletePart = () => {
-    if (!part) return;
+  const deleteDocument = async () => {
+    try {
+      const route = await parentRoute();
+      await service.deleteDocument(doc.id);
+      invalidateForParent(doc.parentId);
+      history.replace(route);
+    } catch (e) {
+      toastError('Delete failed', e);
+    }
+  };
+
+  // One delete entry point: pick between the current page and the whole doc.
+  const onDelete = () => {
+    const canDeletePart = part && doc.parts.length > 1;
     presentActionSheet({
-      header: `Delete "${part.label}"?`,
+      header: canDeletePart ? `Delete from "${doc.title}"` : `Delete "${doc.title}"?`,
       buttons: [
+        ...(canDeletePart
+          ? [
+              {
+                text: `Delete this page (${part.label})`,
+                role: 'destructive' as const,
+                icon: trashOutline,
+                handler: async () => {
+                  try {
+                    await service.deletePart(part.id);
+                    setDoc({ ...doc, parts: doc.parts.filter((p) => p.id !== part.id) });
+                    setActive((i) => Math.max(0, i - 1));
+                    invalidateForParent(doc.parentId);
+                  } catch (e) {
+                    toastError('Delete failed', e);
+                  }
+                },
+              },
+            ]
+          : []),
         {
-          text: 'Delete page',
+          text: 'Delete entire document',
           role: 'destructive',
           icon: trashOutline,
-          handler: async () => {
-            try {
-              await service.deletePart(part.id);
-              setDoc({ ...doc, parts: doc.parts.filter((p) => p.id !== part.id) });
-              setActive((i) => Math.max(0, i - 1));
-              invalidateForParent(doc.parentId);
-            } catch (e) {
-              toastError('Delete failed', e);
-            }
-          },
+          handler: () => void deleteDocument(),
         },
         { text: 'Cancel', role: 'cancel' },
       ],
     });
   };
-
-  const onOverflow = () =>
-    presentActionSheet({
-      header: doc.title,
-      buttons: [
-        { text: 'Add page', icon: addOutline, handler: openAddPart },
-        { text: 'Edit details', icon: createOutline, handler: () => setEditOpen(true) },
-        { text: 'Move to…', icon: swapHorizontalOutline, handler: () => void openMove() },
-        { text: 'Export', icon: shareOutline, handler: () => setExportOpen(true) },
-        {
-          text: 'Delete document',
-          role: 'destructive',
-          icon: trashOutline,
-          handler: async () => {
-            try {
-              const route = await parentRoute();
-              await service.deleteDocument(doc.id);
-              invalidateForParent(doc.parentId);
-              history.replace(route);
-            } catch (e) {
-              toastError('Delete failed', e);
-            }
-          },
-        },
-        { text: 'Cancel', role: 'cancel' },
-      ],
-    });
 
   return (
     <IonPage>
@@ -286,8 +280,11 @@ export default function DocumentDetailPage({ match, history }: Props) {
           </IonButtons>
           <IonTitle>{doc.title}</IonTitle>
           <IonButtons slot="end">
-            <IonButton onClick={onOverflow}>
-              <IonIcon slot="icon-only" icon={ellipsisVertical} />
+            <IonButton onClick={openAddPart} aria-label="Add page">
+              <IonIcon slot="icon-only" icon={addOutline} />
+            </IonButton>
+            <IonButton onClick={() => setEditOpen(true)} aria-label="Edit details">
+              <IonIcon slot="icon-only" icon={createOutline} />
             </IonButton>
           </IonButtons>
         </IonToolbar>
@@ -343,7 +340,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
       </IonContent>
 
       <IonToolbar className="detail__actions">
-        <div className="detail__actionbar">
+        <div className="detail__actionbar detail__actionbar--five">
           <button onClick={onDownload} disabled={busy || !part}>
             <IonIcon icon={downloadOutline} />
             <span>Download</span>
@@ -352,7 +349,15 @@ export default function DocumentDetailPage({ match, history }: Props) {
             <IonIcon icon={shareSocialOutline} />
             <span>Share</span>
           </button>
-          <button className="danger" onClick={onDeletePart} disabled={busy || !part}>
+          <button onClick={() => void openMove()} disabled={busy}>
+            <IonIcon icon={swapHorizontalOutline} />
+            <span>Move</span>
+          </button>
+          <button onClick={() => setExportOpen(true)} disabled={busy}>
+            <IonIcon icon={shareOutline} />
+            <span>Export</span>
+          </button>
+          <button className="danger" onClick={onDelete} disabled={busy}>
             <IonIcon icon={trashOutline} />
             <span>Delete</span>
           </button>
