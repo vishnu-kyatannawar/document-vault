@@ -27,8 +27,10 @@ import {
 import {
   add,
   alertCircleOutline,
+  archiveOutline,
   bugOutline,
   chevronForward,
+  cloudDownloadOutline,
   documentOutline,
   documentsOutline,
   ellipsisHorizontal,
@@ -36,6 +38,7 @@ import {
   folderOutline,
   logOutOutline,
   pencilOutline,
+  shareOutline,
   shieldCheckmark,
   swapHorizontalOutline,
   timeOutline,
@@ -51,6 +54,9 @@ import { downloadLogs, logger } from '../../services/logger';
 import DocumentCard from './DocumentCard';
 import AddDocumentSheet from '../capture/AddDocumentSheet';
 import MoveTargetModal from './MoveTargetModal';
+import ExportSheet from '../transfer/ExportSheet';
+import ImportModal from '../transfer/ImportModal';
+import type { ExportSource } from '../../services/transferService';
 import './DocumentsPage.css';
 
 type Props = RouteComponentProps<{ groupId?: string }>;
@@ -74,6 +80,8 @@ export default function GroupPage({ match }: Props) {
   const [searching, setSearching] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [moving, setMoving] = useState<VaultGroup | null>(null);
+  const [exportSource, setExportSource] = useState<ExportSource | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const [presentActionSheet] = useIonActionSheet();
   const [presentAlert] = useIonAlert();
@@ -203,6 +211,12 @@ export default function GroupPage({ match }: Props) {
           handler: () => setMoving(group),
         },
         {
+          text: 'Export',
+          icon: shareOutline,
+          handler: () =>
+            setExportSource({ kind: 'group', id: group.id, name: group.name }),
+        },
+        {
           text: 'Delete',
           role: 'destructive',
           icon: trashOutline,
@@ -256,6 +270,18 @@ export default function GroupPage({ match }: Props) {
                 <div className="profile-pop">
                   <strong>{profile?.name}</strong>
                   <small>{profile?.email}</small>
+                  <IonButton
+                    fill="clear"
+                    size="small"
+                    onClick={() => setExportSource({ kind: 'vault' })}
+                  >
+                    <IonIcon slot="start" icon={archiveOutline} />
+                    Back up everything
+                  </IonButton>
+                  <IonButton fill="clear" size="small" onClick={() => setImportOpen(true)}>
+                    <IonIcon slot="start" icon={cloudDownloadOutline} />
+                    Import backup…
+                  </IonButton>
                   <IonButton fill="clear" size="small" onClick={() => downloadLogs()}>
                     <IonIcon slot="start" icon={bugOutline} />
                     Download logs
@@ -427,6 +453,14 @@ export default function GroupPage({ match }: Props) {
         fromKey={levelKey}
         onDidDismiss={() => setMoving(null)}
       />
+
+      <ExportSheet
+        isOpen={exportSource !== null}
+        source={exportSource}
+        onDidDismiss={() => setExportSource(null)}
+      />
+
+      <ImportModal isOpen={importOpen} onDidDismiss={() => setImportOpen(false)} />
     </IonPage>
   );
 }

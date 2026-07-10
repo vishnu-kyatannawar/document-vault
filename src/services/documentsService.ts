@@ -48,6 +48,8 @@ export interface DocMeta {
   expiresAt?: string;
   remindDays?: number;
   notes?: string;
+  /** Creation-time override — used by import so copies keep the original date. */
+  createdAt?: string;
 }
 
 export const DEFAULT_REMIND_DAYS = 30;
@@ -252,7 +254,7 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
 
     async createDocument(title, parts, parentId, meta) {
       const pid = parentId ?? (await ensureRoot());
-      const createdAt = new Date().toISOString();
+      const createdAt = meta?.createdAt ?? new Date().toISOString();
       const appProperties: Record<string, string> = { kind: 'doc', title, createdAt };
       if (meta?.expiresAt) appProperties.expiresAt = meta.expiresAt;
       if (meta?.remindDays != null) appProperties.remindDays = String(meta.remindDays);

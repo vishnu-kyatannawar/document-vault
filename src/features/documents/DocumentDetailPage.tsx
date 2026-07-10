@@ -23,6 +23,7 @@ import {
   downloadOutline,
   ellipsisVertical,
   imagesOutline,
+  shareOutline,
   shareSocialOutline,
   swapHorizontalOutline,
   timeOutline,
@@ -42,6 +43,7 @@ import { CaptureSource, pickFiles, suggestFilename } from '../capture/capture';
 import { logger } from '../../services/logger';
 import PartViewer from './PartViewer';
 import MoveTargetModal from './MoveTargetModal';
+import ExportSheet from '../transfer/ExportSheet';
 import './DocumentDetailPage.css';
 
 type Props = RouteComponentProps<{ id: string }>;
@@ -65,6 +67,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveFromKey, setMoveFromKey] = useState(ROOT_KEY);
   const [editOpen, setEditOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [presentActionSheet] = useIonActionSheet();
   const [presentAlert] = useIonAlert();
   const [presentToast] = useIonToast();
@@ -254,6 +257,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
         { text: 'Add page', icon: addOutline, handler: openAddPart },
         { text: 'Edit details', icon: createOutline, handler: () => setEditOpen(true) },
         { text: 'Move to…', icon: swapHorizontalOutline, handler: () => void openMove() },
+        { text: 'Export', icon: shareOutline, handler: () => setExportOpen(true) },
         {
           text: 'Delete document',
           role: 'destructive',
@@ -369,6 +373,12 @@ export default function DocumentDetailPage({ match, history }: Props) {
           });
           invalidateForParent(doc.parentId);
         }}
+      />
+
+      <ExportSheet
+        isOpen={exportOpen}
+        source={exportOpen ? { kind: 'doc', id: doc.id } : null}
+        onDidDismiss={() => setExportOpen(false)}
       />
 
       <MoveTargetModal

@@ -1,0 +1,74 @@
+.transfer-blurb {
+  margin: 6px 4px 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ion-color-step-500);
+}
+
+.transfer-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 18px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.transfer-note ion-icon {
+  flex-shrink: 0;
+  font-size: 15px;
+  margin-top: 1px;
+}
+
+.transfer-error {
+  margin: 14px 4px 0;
+  font-size: 13.5px;
+  color: var(--ion-color-danger);
+}
+
+.transfer-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 18px 4px 0;
+}
+.transfer-progress ion-progress-bar {
+  border-radius: 99px;
+}
+.transfer-progress span {
+  font-size: 13px;
+  color: var(--ion-color-step-500);
+}
+
+.transfer-cta {
+  margin-top: 22px;
+}
+
+/* Import: file picker row */
+.transfer-filepick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 14px;
+  margin: 2px 0 12px;
+  border-radius: var(--app-radius-md);
+  border: 1.5px dashed var(--ion-color-step-200);
+  background: var(--ion-card-background);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--app-accent);
+  text-align: left;
+  cursor: pointer;
+}
+.transfer-filepick ion-icon {
+  flex-shrink: 0;
+  font-size: 20px;
+}
+.transfer-filepick span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transfer-filepick:disabled {
+  opacity: 0.6;
+}

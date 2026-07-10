@@ -33,6 +33,24 @@ export async function shareFile(item: ShareableFile, title: string): Promise<'sh
   return 'fallback';
 }
 
+/**
+ * Share via the OS sheet when possible (mobile), otherwise plain download.
+ * Unlike shareFile there is no WhatsApp fallback — used for backups/exports.
+ * @returns 'shared' | 'downloaded'
+ */
+export async function shareOrDownload(
+  item: ShareableFile,
+  title: string,
+): Promise<'shared' | 'downloaded'> {
+  const file = new File([item.blob], item.filename, { type: item.mimeType });
+  if (navigator.share && canShareFiles([file])) {
+    await navigator.share({ files: [file], title });
+    return 'shared';
+  }
+  downloadFile(item);
+  return 'downloaded';
+}
+
 /** Trigger a browser download of the blob. */
 export function downloadFile(item: ShareableFile): void {
   const url = URL.createObjectURL(item.blob);
