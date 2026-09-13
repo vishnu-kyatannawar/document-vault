@@ -107,7 +107,11 @@ describe('driveClient', () => {
       await client.listFolders('root-id');
       const url = decodeURIComponent(fetchMock.mock.calls[0][0] as string);
       expect(url).toContain('ownedByMe');
-      expect(url).toContain('sharedWithMe');
+      expect(url).toContain('sharedWithMeTime');
+      // `sharedWithMe` is a query term, NOT a file field — Drive rejects it with
+      // 400 "Invalid field selection" and every listing breaks (v0.5.0 outage).
+      const fields = new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('fields')!;
+      expect(fields).not.toMatch(/(^|[,(])sharedWithMe([,)]|$)/);
       expect(url).toContain('capabilities(canEdit,canDownload)');
       expect(url).toContain('copyRequiresWriterPermission');
     });

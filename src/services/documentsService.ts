@@ -191,7 +191,7 @@ function sharingOf(f: DriveFile): SharingInfo {
     ownerName: owner?.displayName || owner?.emailAddress || undefined,
     ownerEmail: owner?.emailAddress,
     canDownload: f.capabilities?.canDownload !== false,
-    sharedDirectly: f.sharedWithMe === true,
+    sharedDirectly: !!f.sharedWithMeTime,
   };
 }
 

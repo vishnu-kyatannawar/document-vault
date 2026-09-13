@@ -101,7 +101,7 @@ function fakeDrive() {
       for (const [k, v] of files) if (v.parents?.[0] === fileId) files.delete(k);
     },
     async listSharedWithMeFolders() {
-      return [...files.values()].filter((f) => f.mimeType === FOLDER && f.sharedWithMe);
+      return [...files.values()].filter((f) => f.mimeType === FOLDER && f.sharedWithMeTime);
     },
     async listPermissions(fileId) {
       return permissions.get(fileId) ?? [];
@@ -498,11 +498,11 @@ describe('documentsService', () => {
       // Simulate what another user's app created and shared with us.
       const owner = { displayName: 'Anita', emailAddress: 'anita@example.com' };
       const group = await client.createFolder('Car', 'their-root', { kind: 'group' });
-      Object.assign(files.get(group.id)!, { ownedByMe: false, sharedWithMe: true, owners: [owner] });
+      Object.assign(files.get(group.id)!, { ownedByMe: false, sharedWithMeTime: '2026-09-13T00:00:00Z', owners: [owner] });
       const doc = await client.createFolder('Passport', 'their-root', { kind: 'doc', title: 'Passport', createdAt: '2026-01-01' });
       Object.assign(files.get(doc.id)!, {
         ownedByMe: false,
-        sharedWithMe: true,
+        sharedWithMeTime: '2026-09-13T00:00:00Z',
         owners: [owner],
         capabilities: { canEdit: false, canDownload: false },
       });

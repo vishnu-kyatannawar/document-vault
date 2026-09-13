@@ -20,8 +20,8 @@ export interface DriveFile {
   parents?: string[];
   /** False for items another user shared with us. */
   ownedByMe?: boolean;
-  /** True on the item that was directly shared with us (not its descendants). */
-  sharedWithMe?: boolean;
+  /** Set (RFC 3339) on the item that was directly shared with us, not its descendants. */
+  sharedWithMeTime?: string;
   owners?: Array<{ displayName?: string; emailAddress?: string }>;
   capabilities?: { canEdit?: boolean; canDownload?: boolean; canShare?: boolean };
   /** Owner setting: readers may not download/copy/print (blocks alt=media too). */
@@ -109,7 +109,7 @@ export function createDriveClient(
   }
 
   const SHARE_FIELDS =
-    'ownedByMe,sharedWithMe,owners(displayName,emailAddress),capabilities(canEdit,canDownload),copyRequiresWriterPermission';
+    'ownedByMe,sharedWithMeTime,owners(displayName,emailAddress),capabilities(canEdit,canDownload),copyRequiresWriterPermission';
   const FIELDS =
     'files(id,name,mimeType,thumbnailLink,createdTime,description,appProperties,parents,' +
     SHARE_FIELDS +
