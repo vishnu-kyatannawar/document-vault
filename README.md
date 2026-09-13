@@ -27,8 +27,20 @@ Live at: `https://vishnu-kyatannawar.github.io/document-vault/`
 - **Your data, your Drive.** Files are stored in a `Document Vault` folder in
   your account, encrypted at rest by Google. Uninstalling the app doesn't touch
   them; you can browse them in Drive directly.
-- **Tokens** are short-lived and kept **in memory only** (never in
-  localStorage), refreshed silently by Google Identity Services.
+- **Sign-in is a redirect, not a popup.** The app sends the browser to
+  `accounts.google.com` and Google sends it straight back with a short-lived
+  access token (OAuth 2.0 implicit flow, no client secret, no backend). Because
+  the visit to Google is a first-party navigation, it also works in installed
+  home-screen apps on iOS/Android and in browsers that block third-party
+  cookies — which is why the app no longer uses the Google Identity Services
+  popup/iframe.
+- **You stay signed in.** The access token (valid ~1 hour), its expiry and your
+  name/email/avatar are cached in the app's `localStorage` so reopening the app
+  is instant. When the token has expired the app bounces through Google
+  silently (`prompt=none`) and comes back signed in — no tap needed as long as
+  you're still signed in to Google. The cache is cleared on sign-out. The token
+  only ever grants `drive.file` access, and the strict CSP below limits what any
+  injected script could do with it.
 - **CSP** restricts script/connect/frame to `self` + Google endpoints only.
 - The Client ID is **origin-locked** to the GitHub Pages URL in Google Cloud, so
   it can't be reused from another site.
@@ -58,10 +70,15 @@ You must create your own OAuth Client ID (free). It takes ~5 minutes.
    - **Authorized JavaScript origins**:
      - `https://vishnu-kyatannawar.github.io`
      - `http://localhost:5173` (for local dev)
+   - **Authorized redirect URIs** (must match exactly, trailing slash included):
+     - `https://vishnu-kyatannawar.github.io/document-vault/`
+     - `http://localhost:5173/document-vault/` (for local dev)
    - Create, then **copy the Client ID** (looks like
      `1234-abc.apps.googleusercontent.com`).
 
-> Note: Do **not** add an Authorized redirect URI — the token flow doesn't use one.
+> If you see Google's **`redirect_uri_mismatch`** page when signing in, the
+> redirect URI above is missing or differs from the app's URL. Add it and try
+> again (it can take a minute to propagate).
 
 ---
 
@@ -102,7 +119,7 @@ GitHub Pages' static hosting.
 ## Architecture
 
 ```
-Google Identity Services ──token──► authStore (in-memory)
+Google OAuth (redirect) ──token──► authStore (localStorage cache)
                                        │ getAccessToken()
                                        ▼
                             driveClient (REST v3, fetch)

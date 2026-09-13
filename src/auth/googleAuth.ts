@@ -1,94 +1,171 @@
-import { AUTH_SCOPES, GOOGLE_CLIENT_ID } from '../config';
+// Google OAuth 2.0 for a browser-only app, driven by top-level redirects.
+//
+// Why redirects and not the Google Identity Services popup/iframe: the silent
+// renewal GIS performs happens in a hidden third-party iframe, and Safari, iOS
+// home-screen apps and browsers with third-party cookies blocked all refuse
+// the Google session cookie there — so every launch fell back to the sign-in
+// page. A top-level navigation to accounts.google.com is first-party in every
+// browser and in installed PWAs, so `prompt=none` returns a fresh token in
+// about a second, and the interactive sign-in works in standalone mode too.
+//
+// Flow (implicit grant, response_type=token — no client secret, no backend):
+//   app ──► accounts.google.com/o/oauth2/v2/auth?...&state=<nonce>
+//       ◄── <redirect_uri>#access_token=…&expires_in=…&scope=…&state=<nonce>
+//        or <redirect_uri>#error=login_required|…&state=<nonce>
 
-const GIS_SRC = 'https://accounts.google.com/gsi/client';
+import { AUTH_SCOPES, DRIVE_SCOPE, GOOGLE_CLIENT_ID } from '../config';
 
-let gisReady: Promise<void> | null = null;
-
-/** Load the Google Identity Services script exactly once. */
-export function loadGis(): Promise<void> {
-  if (gisReady) return gisReady;
-  gisReady = new Promise((resolve, reject) => {
-    if (window.google?.accounts?.oauth2) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = GIS_SRC;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Identity Services'));
-    document.head.appendChild(script);
-  });
-  return gisReady;
-}
+const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
+const REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke';
+const PENDING_KEY = 'vault.auth.pending';
 
 export interface AccessGrant {
   accessToken: string;
-  /** Epoch millis when the token expires. */
+  /** Epoch millis when the token should be considered expired. */
   expiresAt: number;
   scope: string;
-}
-
-// Google recommends creating ONE token client and reusing it. A single shared
-// callback resolves whichever request is currently pending; starting a new
-// request supersedes any stale one so overlapping calls (e.g. silent restore
-// then an interactive tap) can never wedge GIS into an unresolved state.
-let tokenClient: TokenClient | null = null;
-let pending: { resolve: (g: AccessGrant) => void; reject: (e: Error) => void } | null =
-  null;
-
-function settle(fn: (p: NonNullable<typeof pending>) => void): void {
-  if (!pending) return;
-  const p = pending;
-  pending = null;
-  fn(p);
-}
-
-async function ensureClient(): Promise<TokenClient> {
-  await loadGis();
-  if (tokenClient) return tokenClient;
-  const oauth2 = window.google!.accounts.oauth2;
-  tokenClient = oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: AUTH_SCOPES,
-    callback: (resp) =>
-      settle((p) => {
-        if (resp.error) {
-          p.reject(new Error(resp.error_description || resp.error));
-        } else {
-          p.resolve({
-            accessToken: resp.access_token,
-            // Refresh a minute early to avoid mid-request expiry.
-            expiresAt: Date.now() + (resp.expires_in - 60) * 1000,
-            scope: resp.scope,
-          });
-        }
-      }),
-    error_callback: (err) => settle((p) => p.reject(new Error(err.type))),
-  });
-  return tokenClient;
-}
-
-/**
- * Request an access token via the OAuth token flow.
- * @param interactive when false, attempts a silent token (prompt: 'none').
- */
-export async function requestAccessToken(interactive: boolean): Promise<AccessGrant> {
-  const client = await ensureClient();
-  // Abandon any in-flight request before starting a new one.
-  settle((p) => p.reject(new Error('superseded')));
-  return new Promise<AccessGrant>((resolve, reject) => {
-    pending = { resolve, reject };
-    // Interactive uses '' (no forced re-consent once granted); silent uses 'none'.
-    client.requestAccessToken({ prompt: interactive ? '' : 'none' });
-  });
 }
 
 export interface GoogleProfile {
   email: string;
   name: string;
   picture: string;
+}
+
+export type AuthMode = 'silent' | 'interactive';
+
+/** What we remember (in localStorage) while the browser is away at Google. */
+export interface PendingRedirect {
+  nonce: string;
+  mode: AuthMode;
+  /** Same-origin path to land on afterwards (deep links survive the bounce). */
+  returnTo: string;
+  at: number;
+}
+
+export type AuthRedirectResult =
+  | { ok: true; mode: AuthMode; grant: AccessGrant; returnTo: string }
+  | { ok: false; mode: AuthMode; error: string; returnTo: string };
+
+/** Exact redirect URI — must be registered on the OAuth client in Google Cloud. */
+export function redirectUri(): string {
+  return `${window.location.origin}${import.meta.env.BASE_URL}`;
+}
+
+export function buildAuthUrl(opts: { mode: AuthMode; nonce: string; loginHint?: string }): string {
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: redirectUri(),
+    response_type: 'token',
+    scope: AUTH_SCOPES,
+    include_granted_scopes: 'true',
+    state: opts.nonce,
+  });
+  if (opts.mode === 'silent') {
+    // Never show UI: succeed from the Google session cookie or fail fast.
+    params.set('prompt', 'none');
+  } else if (!opts.loginHint) {
+    params.set('prompt', 'select_account');
+  }
+  if (opts.loginHint) params.set('login_hint', opts.loginHint);
+  return `${AUTH_ENDPOINT}?${params.toString()}`;
+}
+
+function randomNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function readPendingRedirect(): PendingRedirect | null {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    const p = raw ? (JSON.parse(raw) as PendingRedirect) : null;
+    return p && typeof p.nonce === 'string' ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingRedirect(): void {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Only ever land on a path inside this app (tampered storage must not redirect elsewhere). */
+function safeReturnTo(path: string | undefined): string {
+  const base = import.meta.env.BASE_URL;
+  return path && path.startsWith(base) && !path.startsWith('//') ? path : base;
+}
+
+/**
+ * Leave for Google. The page unloads; `consumeAuthRedirect()` picks the result
+ * up on the way back. `navigate` is injectable for tests.
+ */
+export function startAuthRedirect(
+  opts: { mode: AuthMode; loginHint?: string; returnTo?: string },
+  navigate: (url: string) => void = (url) => window.location.assign(url),
+): void {
+  const nonce = randomNonce();
+  const returnTo = safeReturnTo(
+    opts.returnTo ?? `${window.location.pathname}${window.location.search}`,
+  );
+  const pending: PendingRedirect = { nonce, mode: opts.mode, returnTo, at: Date.now() };
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+  } catch {
+    // Without storage we cannot verify `state` on return; the result will be
+    // rejected as a mismatch and the user can sign in again.
+  }
+  navigate(buildAuthUrl({ mode: opts.mode, nonce, loginHint: opts.loginHint }));
+}
+
+/**
+ * If the current URL carries Google's response, parse it, scrub the token from
+ * the URL/history (replaceState to the remembered path) and return the result.
+ * Returns null when the URL is not an auth response.
+ */
+export function consumeAuthRedirect(): AuthRedirectResult | null {
+  const hash = window.location.hash;
+  if (!hash || hash.length < 2) return null;
+  const params = new URLSearchParams(hash.slice(1));
+  const state = params.get('state');
+  const token = params.get('access_token');
+  const error = params.get('error');
+  if (!state || (!token && !error)) return null;
+
+  const pending = readPendingRedirect();
+  clearPendingRedirect();
+  const mode: AuthMode = pending?.mode ?? 'interactive';
+  const returnTo = safeReturnTo(pending?.returnTo);
+  // First thing: get the token out of the address bar and history.
+  window.history.replaceState(null, '', returnTo);
+
+  if (!pending || pending.nonce !== state) {
+    return { ok: false, mode, error: 'state_mismatch', returnTo };
+  }
+  if (error) return { ok: false, mode, error, returnTo };
+
+  const scope = params.get('scope') ?? '';
+  if (!scope.split(' ').includes(DRIVE_SCOPE)) {
+    // The user unticked Drive on the consent screen — the app cannot work.
+    return { ok: false, mode, error: 'access_denied', returnTo };
+  }
+  const expiresIn = Number(params.get('expires_in')) || 3600;
+  return {
+    ok: true,
+    mode,
+    returnTo,
+    grant: {
+      accessToken: token!,
+      // Treat as expired a minute early to avoid mid-request expiry.
+      expiresAt: Date.now() + (expiresIn - 60) * 1000,
+      scope,
+    },
+  };
 }
 
 /** Fetch basic profile using the granted access token (email/profile scopes). */
@@ -101,7 +178,14 @@ export async function fetchProfile(accessToken: string): Promise<GoogleProfile> 
   return { email: data.email, name: data.name, picture: data.picture };
 }
 
-/** Revoke the token with Google (best-effort). */
-export function revokeToken(accessToken: string): void {
-  window.google?.accounts.oauth2.revoke(accessToken);
+/** Revoke the token with Google (best-effort, never throws). */
+export async function revokeToken(accessToken: string): Promise<void> {
+  try {
+    await fetch(`${REVOKE_ENDPOINT}?token=${encodeURIComponent(accessToken)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+  } catch {
+    // Offline or blocked — the token expires on its own within the hour.
+  }
 }

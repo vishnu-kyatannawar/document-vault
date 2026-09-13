@@ -58,7 +58,8 @@ export default function SignInPage() {
           )}
 
           <p className="signin__legal">
-            We only request access to files this app creates in your Drive.
+            You’ll be taken to Google and brought straight back. We only request
+            access to files this app creates in your Drive.
           </p>
         </div>
       </IonContent>

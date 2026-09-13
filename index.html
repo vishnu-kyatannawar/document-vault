@@ -12,16 +12,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Vault" />
     <!--
-      Content Security Policy: only self + Google Identity/Drive endpoints.
-      No inline scripts allowed (Vite injects module scripts by src).
+      Content Security Policy: only self + Google Drive/OAuth endpoints. Sign-in
+      is a top-level redirect to accounts.google.com (no third-party script or
+      iframe needed). No inline scripts allowed (Vite injects module scripts by src).
     -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self';
-               script-src 'self' https://accounts.google.com;
+               script-src 'self';
                worker-src 'self' blob:;
-               frame-src https://accounts.google.com https://content.googleapis.com;
-               connect-src 'self' https://www.googleapis.com https://content.googleapis.com https://accounts.google.com;
+               frame-src https://content.googleapis.com;
+               connect-src 'self' https://www.googleapis.com https://content.googleapis.com https://oauth2.googleapis.com;
                img-src 'self' data: blob: https://*.googleusercontent.com https://*.googleapis.com;
                style-src 'self' 'unsafe-inline';
                font-src 'self' data:;

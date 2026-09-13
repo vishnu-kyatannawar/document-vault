@@ -15,12 +15,32 @@ const BASENAME = '/document-vault';
 export default function App() {
   const status = useAuthStore((s) => s.status);
   const restore = useAuthStore((s) => s.restore);
+  const renewIfStale = useAuthStore((s) => s.renewIfStale);
 
-  // On load, silently restore the session (no popup) so a refresh doesn't force
-  // a fresh Google sign-in when the user still has an active Google session.
+  // On load: pick up a returning Google redirect, reuse the cached token, or
+  // renew it silently — so opening the app never means signing in again.
   useEffect(() => {
-    if (isConfigured()) restore();
+    if (isConfigured()) void restore();
   }, [restore]);
+
+  // On resume, renew a token that is about to expire while the user is not in
+  // the middle of anything — a bounce through Google mid-upload would lose work.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') renewIfStale();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    // Pressing Back on Google's page can restore this page from the browser's
+    // back/forward cache mid-"signing-in"/"restoring". Start over cleanly.
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, [renewIfStale]);
 
   // Render sign-in / setup screens OUTSIDE the router. Mounting conditional
   // routes inside a single IonRouterOutlet stops it from swapping views when

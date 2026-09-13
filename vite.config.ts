@@ -51,15 +51,12 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         // SPA offline fallback for deep links within the app scope.
         navigateFallback: `${BASE}index.html`,
-        // Never cache Google auth or Drive API responses — always hit network.
+        // Never cache Drive API / userinfo responses — always hit network.
+        // (Sign-in is a top-level navigation to Google, which the SW never sees.)
         navigateFallbackDenylist: [/^\/document-vault\/api/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/(www|content)\.googleapis\.com\/.*/,
-            handler: 'NetworkOnly',
-          },
-          {
-            urlPattern: /^https:\/\/accounts\.google\.com\/.*/,
             handler: 'NetworkOnly',
           },
         ],
