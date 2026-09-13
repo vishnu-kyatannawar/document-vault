@@ -30,6 +30,7 @@ import {
   documentsOutline,
   folderOpenOutline,
   folderOutline,
+  logoGoogle,
   pencilOutline,
   shareOutline,
   shieldCheckmark,
@@ -44,6 +45,7 @@ import { documents as service } from '../../services/vault';
 import { VaultDocument, VaultGroup, expiryInfo } from '../../services/documentsService';
 import { resetLocalData } from '../../services/session';
 import { logger } from '../../services/logger';
+import { driveFolderUrl, openInDrive } from '../../services/driveLinks';
 import DocumentCard from './DocumentCard';
 import AddDocumentSheet from '../capture/AddDocumentSheet';
 import MoveTargetModal from './MoveTargetModal';
@@ -83,6 +85,21 @@ export default function GroupPage({ match }: Props) {
   const [presentToast] = useIonToast();
 
   const [attention, setAttention] = useState<VaultDocument[]>([]);
+  // Root folder id for the profile sheet's "Open in Google Drive" row. Resolved
+  // up front so the link opens synchronously inside the tap (popup blockers).
+  const [rootId, setRootId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isRoot) return;
+    let active = true;
+    service
+      .ensureRoot()
+      .then((id) => active && setRootId(id))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [isRoot]);
 
   const loadAttention = () => {
     if (!isRoot) return;
@@ -393,6 +410,15 @@ export default function GroupPage({ match }: Props) {
                         <IonIcon icon={shareOutline} />
                       </button>
                       <button
+                        aria-label={`Open ${group.name} in Google Drive`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openInDrive(driveFolderUrl(group.id));
+                        }}
+                      >
+                        <IonIcon icon={logoGoogle} />
+                      </button>
+                      <button
                         className="danger"
                         aria-label={`Delete ${group.name}`}
                         onClick={(e) => {
@@ -462,6 +488,7 @@ export default function GroupPage({ match }: Props) {
         onDidDismiss={() => setProfileOpen(false)}
         onBackup={() => setExportSource({ kind: 'vault' })}
         onImport={() => setImportOpen(true)}
+        onOpenInDrive={rootId ? () => openInDrive(driveFolderUrl(rootId)) : undefined}
         onSignOut={handleSignOut}
       />
     </IonPage>

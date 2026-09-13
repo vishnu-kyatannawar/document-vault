@@ -11,6 +11,7 @@ import {
   chevronForward,
   cloudDownloadOutline,
   logOutOutline,
+  logoGoogle,
   refreshOutline,
 } from 'ionicons/icons';
 import { useAuthStore } from '../../store/authStore';
@@ -23,6 +24,8 @@ interface Props {
   onDidDismiss: () => void;
   onBackup: () => void;
   onImport: () => void;
+  /** Opens the root 'Document Vault' folder in Drive; undefined until the id is known. */
+  onOpenInDrive?: () => void;
   onSignOut: () => void;
 }
 
@@ -32,6 +35,7 @@ export default function ProfileSheet({
   onDidDismiss,
   onBackup,
   onImport,
+  onOpenInDrive,
   onSignOut,
 }: Props) {
   const profile = useAuthStore((s) => s.profile);
@@ -78,6 +82,13 @@ export default function ProfileSheet({
       label: 'Import backup',
       note: 'Restore or receive shared documents',
       onClick: () => runAfterClose(onImport),
+    },
+    {
+      icon: logoGoogle,
+      label: 'Open in Google Drive',
+      note: 'Browse the Document Vault folder',
+      busy: !onOpenInDrive,
+      onClick: () => onOpenInDrive?.(),
     },
     {
       icon: refreshOutline,

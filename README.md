@@ -9,6 +9,8 @@ Drive** — there is no backend and no server that ever sees your files.
 - 📸 Add pages via camera, gallery, or file upload
 - 🗂️ Multi-page documents (e.g. license **front + back**)
 - 👁️ In-app viewer for images and PDFs
+- 🟢 Open any document, page or folder directly in **Google Drive** — files are
+  stored as-is (plain JPEG/PDF), never transformed or encrypted by the app
 - ⬇️ Download and 🔗 share to WhatsApp (and any app) via the native share sheet
 - ⚡ Offline app shell, installable to your home screen
 
@@ -110,9 +112,16 @@ Google Identity Services ──token──► authStore (in-memory)
                     documentsStore ──► Ionic React UI
 ```
 
-- **Data layout in Drive:** a `Document Vault` root folder; each document is a
-  subfolder; each page/part is a file inside it, with the label stored in the
-  file's Drive `appProperties`. Document title/category/date live in the
-  folder's `appProperties`.
+- **Data layout in Drive:** a `Document Vault` root folder; groups are nested
+  subfolders; each document is a subfolder named after its title; each
+  page/part is the original image/PDF file inside it, with the label stored in
+  the file's Drive `appProperties`. Document title, created date, expiry and
+  reminder window live in the folder's `appProperties`; notes live in the
+  folder's Drive `description`. Renaming a document or a page renames the Drive
+  folder/file too, so the vault reads the same in the Drive app.
+- **Open in Google Drive:** every id the app holds is a real Drive id, so
+  "Open in Google Drive" links (document page header, group rows, profile
+  sheet) are built locally and open Drive's own viewer in a new tab — or the
+  Drive app on a phone.
 
 See [src/](src/) for the code, and the tests in [tests/](tests/).

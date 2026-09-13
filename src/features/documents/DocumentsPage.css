@@ -199,6 +199,16 @@
 .group-row__actions button.danger {
   color: var(--ion-color-danger);
 }
+/* Five inline actions: tighten on narrow phones so the name keeps room. */
+@media (max-width: 380px) {
+  .group-row__actions button {
+    width: 30px;
+    height: 30px;
+  }
+  .group-row__actions button ion-icon {
+    font-size: 16px;
+  }
+}
 
 .search-hint {
   margin: 12px 18px 0;

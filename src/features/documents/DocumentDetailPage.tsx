@@ -21,7 +21,9 @@ import {
   documentAttachOutline,
   documentTextOutline,
   downloadOutline,
+  folderOpenOutline,
   imagesOutline,
+  logoGoogle,
   shareOutline,
   shareSocialOutline,
   swapHorizontalOutline,
@@ -38,6 +40,7 @@ import {
 } from '../../services/documentsService';
 import EditDetailsModal from './EditDetailsModal';
 import { downloadFile, shareFile } from '../share/share';
+import { driveFileUrl, driveFolderUrl, openInDrive } from '../../services/driveLinks';
 import { CaptureSource, pickFiles, suggestFilename } from '../capture/capture';
 import { logger } from '../../services/logger';
 import PartViewer from './PartViewer';
@@ -230,11 +233,14 @@ export default function DocumentDetailPage({ match, history }: Props) {
             const label = values.label?.trim();
             if (!label) return false;
             service
-              .renamePart(p.id, label)
-              .then(() => {
+              .renamePart(p.id, label, p.name)
+              .then((name) => {
                 setDoc((d) =>
                   d
-                    ? { ...d, parts: d.parts.map((x) => (x.id === p.id ? { ...x, label } : x)) }
+                    ? {
+                        ...d,
+                        parts: d.parts.map((x) => (x.id === p.id ? { ...x, label, name } : x)),
+                      }
                     : d,
                 );
                 invalidateForParent(doc.parentId);
@@ -243,6 +249,28 @@ export default function DocumentDetailPage({ match, history }: Props) {
             return true;
           },
         },
+      ],
+    });
+
+  const openInGoogleDrive = () =>
+    presentActionSheet({
+      header: 'Open in Google Drive',
+      buttons: [
+        ...(part
+          ? [
+              {
+                text: `Open this page (${part.label})`,
+                icon: documentTextOutline,
+                handler: () => openInDrive(driveFileUrl(part.id)),
+              },
+            ]
+          : []),
+        {
+          text: 'Open document folder',
+          icon: folderOpenOutline,
+          handler: () => openInDrive(driveFolderUrl(doc.id)),
+        },
+        { text: 'Cancel', role: 'cancel' },
       ],
     });
 
@@ -308,6 +336,9 @@ export default function DocumentDetailPage({ match, history }: Props) {
           </IonButtons>
           <IonTitle>{doc.title}</IonTitle>
           <IonButtons slot="end">
+            <IonButton onClick={openInGoogleDrive} aria-label="Open in Google Drive">
+              <IonIcon slot="icon-only" icon={logoGoogle} />
+            </IonButton>
             <IonButton onClick={openAddPart} aria-label="Add page">
               <IonIcon slot="icon-only" icon={addOutline} />
             </IonButton>

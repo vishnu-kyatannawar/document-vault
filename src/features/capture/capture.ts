@@ -1,6 +1,8 @@
 // File acquisition helpers. Uses a hidden <input type="file"> which, on mobile
 // browsers, transparently supports camera capture, gallery and file storage.
 
+import { extensionOf, slugFilename } from '../../services/filenames';
+
 export type CaptureSource = 'camera' | 'gallery' | 'files';
 
 const ACCEPT: Record<CaptureSource, string> = {
@@ -44,11 +46,5 @@ export function pickFiles(source: CaptureSource, multiple = false): Promise<File
 
 /** Suggest a filename for a captured/selected file, keeping the extension. */
 export function suggestFilename(label: string, file: File): string {
-  const ext = file.name.includes('.')
-    ? file.name.slice(file.name.lastIndexOf('.'))
-    : file.type === 'application/pdf'
-      ? '.pdf'
-      : '.jpg';
-  const safe = label.replace(/[^\w-]+/g, '-').toLowerCase();
-  return `${safe}${ext}`;
+  return slugFilename(label, extensionOf(file.name, file.type));
 }

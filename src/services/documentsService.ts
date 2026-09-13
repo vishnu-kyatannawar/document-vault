@@ -3,8 +3,8 @@
 //   "Document Vault"/                    (root, cached id)
 //     <Group folder>                     (appProperties: kind='group')
 //       <Group folder>                   (groups nest to any depth)
-//       <Document folder>                (kind='doc' + title/category/createdAt)
-//         <part file>                    (appProperties: label)
+//       <Document folder>                (kind='doc' + title/createdAt/expiresAt/remindDays; notes in description)
+//         <part file>                    (raw image/PDF; appProperties: label)
 //
 // Legacy document folders (created before groups existed) have no `kind`; they
 // are detected by their `title` property and lazily stamped. Folders created
@@ -12,6 +12,7 @@
 // so their contents stay reachable.
 
 import { ROOT_FOLDER_NAME } from '../config';
+import { extensionOf, slugFilename } from './filenames';
 import { DriveClient, DriveFile } from './driveClient';
 
 const ROOT_CACHE_KEY = 'vault.rootFolderId';
@@ -116,8 +117,12 @@ export interface DocumentsService {
   /** Fetch a single document by id (deep links), or null if gone. */
   getDocument(id: string): Promise<VaultDocument | null>;
   addPart(documentId: string, part: NewPart): Promise<DocumentPart>;
-  /** Rename a page's display label. */
-  renamePart(fileId: string, label: string): Promise<void>;
+  /**
+   * Rename a page: updates the display label AND the Drive file name (keeping
+   * the extension) so the page looks right in the Drive UI too.
+   * @returns the new Drive file name
+   */
+  renamePart(fileId: string, label: string, currentName: string): Promise<string>;
   deletePart(fileId: string): Promise<void>;
   deleteDocument(documentId: string): Promise<void>;
   getPartBlob(fileId: string): Promise<Blob>;
@@ -337,8 +342,10 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       return toPart(file);
     },
 
-    renamePart(fileId, label) {
-      return drive.updateAppProperties(fileId, { label });
+    async renamePart(fileId, label, currentName) {
+      const name = slugFilename(label, extensionOf(currentName));
+      await drive.updateFileMeta(fileId, { name, appProperties: { label } });
+      return name;
     },
 
     deletePart(fileId) {

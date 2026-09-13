@@ -290,18 +290,23 @@ describe('documentsService', () => {
     });
   });
 
-  it('renames a page (part label)', async () => {
-    const { client } = fakeDrive();
+  it('renames a page (label + Drive file name, keeping the extension)', async () => {
+    const { client, files } = fakeDrive();
     const svc = createDocumentsService(client);
     const doc = await svc.createDocument('Aadhaar', [
       { label: 'Page 1', filename: 'a.jpg', blob: new Blob(['1']) },
-      { label: 'Page 2', filename: 'b.jpg', blob: new Blob(['2']) },
+      { label: 'Page 2', filename: 'b.PDF', blob: new Blob(['2']) },
     ]);
 
-    await svc.renamePart(doc.parts[0].id, 'Front side');
+    const name = await svc.renamePart(doc.parts[0].id, 'Front side', doc.parts[0].name);
+    expect(name).toBe('front-side.jpg');
+    await svc.renamePart(doc.parts[1].id, 'Back', doc.parts[1].name);
 
     const fresh = await svc.getDocument(doc.id);
-    expect(fresh?.parts.map((p) => p.label)).toEqual(['Front side', 'Page 2']);
+    expect(fresh?.parts.map((p) => p.label)).toEqual(['Front side', 'Back']);
+    expect(fresh?.parts.map((p) => p.name)).toEqual(['front-side.jpg', 'back.PDF']);
+    // Drive-side file name is what the Drive UI shows.
+    expect(files.get(doc.parts[0].id)?.name).toBe('front-side.jpg');
   });
 
   it('renames a document (folder name + title property)', async () => {
