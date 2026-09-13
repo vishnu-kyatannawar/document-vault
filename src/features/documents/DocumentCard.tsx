@@ -1,6 +1,6 @@
 import { IonCard, IonIcon, IonSpinner } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
-import { documentTextOutline, layersOutline, timeOutline } from 'ionicons/icons';
+import { documentTextOutline, layersOutline, peopleOutline, timeOutline } from 'ionicons/icons';
 import { VaultDocument, expiryInfo } from '../../services/documentsService';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import './DocumentCard.css';
@@ -8,7 +8,8 @@ import './DocumentCard.css';
 export default function DocumentCard({ doc }: { doc: VaultDocument }) {
   const history = useHistory();
   const cover = doc.parts[0];
-  const { url, failed } = useThumbnail(cover);
+  // "View in Google Drive only" shares forbid downloads — don't even try.
+  const { url, failed } = useThumbnail(doc.canDownload ? cover : undefined);
   const info = expiryInfo(doc);
   const expired = info?.state === 'expired';
   const expiring = info?.state === 'expiring';
@@ -26,6 +27,11 @@ export default function DocumentCard({ doc }: { doc: VaultDocument }) {
           <IonIcon icon={documentTextOutline} className="doc-card__icon" />
         ) : (
           <IonSpinner name="crescent" className="doc-card__spin" />
+        )}
+        {doc.access === 'reader' && (
+          <span className="doc-card__badge doc-card__badge--shared" title={`Shared by ${doc.ownerName ?? 'someone'}`}>
+            <IonIcon icon={peopleOutline} /> Shared
+          </span>
         )}
         {doc.parts.length > 1 && (
           <span className="doc-card__badge">

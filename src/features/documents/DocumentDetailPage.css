@@ -163,3 +163,29 @@ button.detail__chip--notes {
 .detail__actionbar--five button ion-icon {
   font-size: 21px;
 }
+
+/* Shared-with-us chip + locked preview (view-in-Drive-only shares) */
+.detail__chip--shared {
+  background: var(--ion-color-step-100);
+  color: var(--ion-color-step-600);
+}
+.detail__locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ion-color-step-500);
+}
+.detail__locked ion-icon {
+  font-size: 40px;
+  color: var(--ion-color-step-400);
+}
+.detail__locked p {
+  margin: 0;
+  max-width: 300px;
+  font-size: 14px;
+  line-height: 1.45;
+}

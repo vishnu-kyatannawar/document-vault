@@ -285,3 +285,51 @@
   color: var(--ion-color-step-500);
   font-size: 14.5px;
 }
+
+/* Group header when the group was shared with us */
+.group-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.group-title small {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ion-color-step-500);
+}
+
+/* "Shared with me" section (root only) */
+.shared {
+  margin-top: 6px;
+}
+.shared__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 18px 16px 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ion-color-step-500);
+}
+.shared__title ion-icon {
+  font-size: 15px;
+}
+.group-list--shared {
+  padding-top: 10px;
+}
+.group-row__icon--shared {
+  background: var(--ion-color-step-100);
+}
+.group-row__icon--shared ion-icon {
+  color: var(--ion-color-step-600);
+}
+.group-row__sub {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ion-color-step-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

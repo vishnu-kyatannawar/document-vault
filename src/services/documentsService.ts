@@ -11,7 +11,7 @@
 // directly in the Drive UI have no properties at all and are treated as groups
 // so their contents stay reachable.
 
-import { ROOT_FOLDER_NAME } from '../config';
+import { DRIVE_FOLDER_MIME, ROOT_FOLDER_NAME } from '../config';
 import { extensionOf, slugFilename } from './filenames';
 import { DriveClient, DriveFile } from './driveClient';
 
@@ -25,13 +25,28 @@ export interface DocumentPart {
   thumbnailLink?: string;
 }
 
-export interface VaultGroup {
+/** Who we are relative to an item: its owner, or someone it was shared with. */
+export type VaultAccess = 'owner' | 'reader';
+
+export interface SharingInfo {
+  /** True when we own the item and thus may manage sharing. */
+  access: VaultAccess;
+  /** Owner's display name/email — shown on items shared with us. */
+  ownerName?: string;
+  ownerEmail?: string;
+  /** False when the owner allows viewing in Google Drive only (no download). */
+  canDownload: boolean;
+  /** True on the item that was shared with us directly (its parent is not reachable). */
+  sharedDirectly: boolean;
+}
+
+export interface VaultGroup extends SharingInfo {
   id: string;
   name: string;
   parentId: string;
 }
 
-export interface VaultDocument {
+export interface VaultDocument extends SharingInfo {
   id: string;
   title: string;
   createdAt: string;
@@ -51,6 +66,19 @@ export interface DocMeta {
   notes?: string;
   /** Creation-time override — used by import so copies keep the original date. */
   createdAt?: string;
+}
+
+export type ShareLevel = 'download' | 'view';
+
+export interface SharePerson {
+  permissionId: string;
+  email: string;
+  name?: string;
+}
+
+export interface ShareState {
+  level: ShareLevel;
+  people: SharePerson[];
 }
 
 export const DEFAULT_REMIND_DAYS = 30;
@@ -134,6 +162,16 @@ export interface DocumentsService {
   ): Promise<void>;
   /** Search ALL documents at any depth by title/category substring. */
   searchDocuments(text: string): Promise<VaultDocument[]>;
+
+  // --- sharing with other people (Drive permissions on the folder) ---------
+  /** Groups/documents other users shared with us (read-only). */
+  listSharedWithMe(): Promise<VaultLevel>;
+  getSharing(id: string): Promise<ShareState>;
+  /** Give a Google account read access. Resolves with the new person entry. */
+  shareWith(id: string, email: string): Promise<SharePerson>;
+  unshare(id: string, permissionId: string): Promise<void>;
+  /** 'download' = view & download; 'view' = view in Google Drive only. */
+  setShareLevel(id: string, level: ShareLevel): Promise<void>;
 }
 
 function toPart(file: DriveFile): DocumentPart {
@@ -144,6 +182,21 @@ function toPart(file: DriveFile): DocumentPart {
     mimeType: file.mimeType,
     thumbnailLink: file.thumbnailLink,
   };
+}
+
+function sharingOf(f: DriveFile): SharingInfo {
+  const owner = f.owners?.[0];
+  return {
+    access: f.ownedByMe === false ? 'reader' : 'owner',
+    ownerName: owner?.displayName || owner?.emailAddress || undefined,
+    ownerEmail: owner?.emailAddress,
+    canDownload: f.capabilities?.canDownload !== false,
+    sharedDirectly: f.sharedWithMe === true,
+  };
+}
+
+function toGroup(f: DriveFile, parentId: string): VaultGroup {
+  return { id: f.id, name: f.name, parentId, ...sharingOf(f) };
 }
 
 function classify(folder: DriveFile): 'doc' | 'group' {
@@ -165,6 +218,7 @@ function toDoc(folder: DriveFile, parts: DocumentPart[], parentId: string): Vaul
     notes: folder.description || undefined,
     parts,
     parentId,
+    ...sharingOf(folder),
   };
 }
 
@@ -205,6 +259,29 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
     return toDoc(folder, children.map(toPart), parentId);
   }
 
+  /**
+   * copyRequiresWriterPermission ("view in Drive only") is a per-file flag —
+   * Drive does not reliably propagate it from a folder to what is inside, so
+   * apply it to the whole subtree ourselves.
+   */
+  async function applyCopyRestriction(folderId: string, value: boolean): Promise<void> {
+    await drive.setCopyRequiresWriterPermission(folderId, value);
+    const children = await drive.listChildren(folderId);
+    await Promise.all(
+      children.map((c) =>
+        c.mimeType === DRIVE_FOLDER_MIME
+          ? applyCopyRestriction(c.id, value)
+          : drive.setCopyRequiresWriterPermission(c.id, value),
+      ),
+    );
+  }
+
+  /** New items inherit their parent's "view in Drive only" restriction. */
+  async function inheritCopyRestriction(parentId: string, newFolderId: string): Promise<void> {
+    const parent = await drive.getFile(parentId);
+    if (parent?.copyRequiresWriterPermission) await applyCopyRestriction(newFolderId, true);
+  }
+
   return {
     ensureRoot,
 
@@ -220,7 +297,7 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       const groups: VaultGroup[] = [];
       const docFolders: DriveFile[] = [];
       for (const f of folders) {
-        if (classify(f) === 'group') groups.push({ id: f.id, name: f.name, parentId: pid });
+        if (classify(f) === 'group') groups.push(toGroup(f, pid));
         else docFolders.push(f);
       }
 
@@ -242,7 +319,7 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
     async getGroup(id) {
       const f = await drive.getFile(id);
       if (!f || f.trashed) return null;
-      return { id: f.id, name: f.name, parentId: f.parents?.[0] ?? '' };
+      return toGroup(f, f.parents?.[0] ?? '');
     },
 
     async createGroup(name, parentId) {
@@ -251,7 +328,8 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
         kind: 'group',
         createdAt: new Date().toISOString(),
       });
-      return { id: folder.id, name, parentId: pid };
+      if (parentId) await inheritCopyRestriction(pid, folder.id);
+      return toGroup({ ...folder, name }, pid);
     },
 
     renameGroup(id, name) {
@@ -290,6 +368,7 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       const uploaded = await Promise.all(
         parts.map((p) => drive.uploadFile(folder.id, p.filename, p.blob, { label: p.label })),
       );
+      if (parentId) await inheritCopyRestriction(pid, folder.id);
       return {
         id: folder.id,
         title,
@@ -299,6 +378,7 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
         notes: meta?.notes,
         parts: uploaded.map(toPart),
         parentId: pid,
+        ...sharingOf(folder),
       };
     },
 
@@ -339,6 +419,10 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       const file = await drive.uploadFile(documentId, part.filename, part.blob, {
         label: part.label,
       });
+      const folder = await drive.getFile(documentId);
+      if (folder?.copyRequiresWriterPermission) {
+        await drive.setCopyRequiresWriterPermission(file.id, true);
+      }
       return toPart(file);
     },
 
@@ -376,6 +460,7 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
       }
 
       await drive.moveFile(id, from, to);
+      if (toParentId) await inheritCopyRestriction(to, id);
     },
 
     async searchDocuments(text) {
@@ -386,6 +471,62 @@ export function createDocumentsService(drive: DriveClient): DocumentsService {
         .filter((f) => (f.appProperties?.title ?? f.name).toLowerCase().includes(q))
         .slice(0, 30);
       return Promise.all(matches.map((f) => docWithParts(f, f.parents?.[0] ?? '')));
+    },
+
+    async listSharedWithMe() {
+      const folders = await drive.listSharedWithMeFolders();
+      const groups: VaultGroup[] = [];
+      const docFolders: DriveFile[] = [];
+      for (const f of folders) {
+        const parentId = f.parents?.[0] ?? '';
+        if (classify(f) === 'group') groups.push(toGroup(f, parentId));
+        else docFolders.push(f);
+      }
+      const documents = await Promise.all(
+        docFolders.map((f) => docWithParts(f, f.parents?.[0] ?? '')),
+      );
+      groups.sort((a, b) => a.name.localeCompare(b.name));
+      documents.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return { groups, documents };
+    },
+
+    async getSharing(id) {
+      const [file, permissions] = await Promise.all([
+        drive.getFile(id),
+        drive.listPermissions(id),
+      ]);
+      const people: SharePerson[] = permissions
+        .filter((p) => p.type === 'user' && p.role !== 'owner' && p.emailAddress)
+        .map((p) => ({ permissionId: p.id, email: p.emailAddress!, name: p.displayName }));
+      return {
+        level: file?.copyRequiresWriterPermission ? 'view' : 'download',
+        people,
+      };
+    },
+
+    async shareWith(id, email) {
+      const address = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+        throw new Error('Enter a valid email address.');
+      }
+      try {
+        const p = await drive.createReaderPermission(id, address);
+        return { permissionId: p.id, email: p.emailAddress ?? address, name: p.displayName };
+      } catch (e) {
+        const msg = (e as Error).message;
+        if (/invalid|notFound|not found|400|404/i.test(msg)) {
+          throw new Error(`Google doesn't recognise ${address}. Use their Google account email.`);
+        }
+        throw e;
+      }
+    },
+
+    unshare(id, permissionId) {
+      return drive.deletePermission(id, permissionId);
+    },
+
+    setShareLevel(id, level) {
+      return applyCopyRestriction(id, level === 'view');
     },
   };
 }

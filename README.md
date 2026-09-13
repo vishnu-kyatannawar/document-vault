@@ -12,6 +12,9 @@ Drive** — there is no backend and no server that ever sees your files.
 - 🟢 Open any document, page or folder directly in **Google Drive** — files are
   stored as-is (plain JPEG/PDF), never transformed or encrypted by the app
 - ⬇️ Download and 🔗 share to WhatsApp (and any app) via the native share sheet
+- 👥 **Share with people** — give another Google account live, read-only access
+  to a group or document (one copy, always current); they see it under
+  *Shared with me* in their own app
 - ⚡ Offline app shell, installable to your home screen
 
 Live at: `https://vishnu-kyatannawar.github.io/document-vault/`
@@ -41,6 +44,10 @@ Live at: `https://vishnu-kyatannawar.github.io/document-vault/`
   you're still signed in to Google. The cache is cleared on sign-out. The token
   only ever grants `drive.file` access, and the strict CSP below limits what any
   injected script could do with it.
+- **Sharing is plain Drive sharing.** "Share with people" adds a *reader*
+  permission on the group/document folder in your Drive — nothing is copied,
+  and you can see or revoke the same access from Google Drive itself. Readers
+  can never edit or delete.
 - **CSP** restricts script/connect/frame to `self` + Google endpoints only.
 - The Client ID is **origin-locked** to the GitHub Pages URL in Google Cloud, so
   it can't be reused from another site.
@@ -64,7 +71,11 @@ You must create your own OAuth Client ID (free). It takes ~5 minutes.
    - **Scopes** → Add → select `.../auth/drive.file` (and `openid`, `email`,
      `profile`). `drive.file` is a **non-sensitive** scope, so no Google
      verification review is required.
-   - **Test users** → add your own Google account (or **Publish** the app).
+   - **Publish** the app (Publishing status → *In production*). With only
+     non-sensitive scopes this is instant and needs no review. Publishing is
+     required for **Share with people**: anyone you share with signs into this
+     app with their own Google account, and in *Testing* mode that is blocked
+     unless each of them is listed under **Test users**.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Web application**.
    - **Authorized JavaScript origins**:
@@ -113,6 +124,32 @@ pnpm preview     # serve the production build locally
 
 The build copies `index.html` → `404.html` so deep links / refreshes work on
 GitHub Pages' static hosting.
+
+---
+
+## Sharing with people
+
+Tap the share icon on a group row (or **People** on a document) → **Share with
+people…**, enter the other person's Google account email and choose a level:
+
+| Level | They can | They cannot |
+| --- | --- | --- |
+| **Can view & download** | open pages in the app, download, share on | add, edit, rename, move, delete |
+| **View in Google Drive only** | open pages inside Google Drive | download, copy, print; in-app preview |
+
+They sign into Document Vault with that account and find the item under
+**Shared with me** on the home screen (Google also emails them a link). There is
+exactly one copy — in your Drive — so they always see the current pages, and
+removing them in the sheet (or in Drive) ends their access immediately.
+
+Under the hood this is a Drive `reader` permission on the folder, so it also
+works for anything you add to that group later.
+
+> First time: verify with two accounts — A shares "Car" with B; B signs in and
+> sees it under *Shared with me*, can open and download but not edit. If B
+> cannot see it at all, the app's `drive.file` scope is not exposing files
+> another user created; the fallback is a Google Picker "Add shared folder"
+> step (not built yet).
 
 ---
 

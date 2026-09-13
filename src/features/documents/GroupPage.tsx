@@ -32,6 +32,7 @@ import {
   folderOutline,
   logoGoogle,
   pencilOutline,
+  peopleOutline,
   shareOutline,
   shieldCheckmark,
   swapHorizontalOutline,
@@ -40,7 +41,7 @@ import {
 } from 'ionicons/icons';
 import { RouteComponentProps, useHistory } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { ROOT_KEY, useDocumentsStore } from '../../store/documentsStore';
+import { ROOT_KEY, SHARED_KEY, useDocumentsStore } from '../../store/documentsStore';
 import { documents as service } from '../../services/vault';
 import { VaultDocument, VaultGroup, expiryInfo } from '../../services/documentsService';
 import { resetLocalData } from '../../services/session';
@@ -50,6 +51,7 @@ import DocumentCard from './DocumentCard';
 import AddDocumentSheet from '../capture/AddDocumentSheet';
 import MoveTargetModal from './MoveTargetModal';
 import ExportSheet from '../transfer/ExportSheet';
+import SharePeopleSheet from '../share/SharePeopleSheet';
 import ImportModal from '../transfer/ImportModal';
 import ProfileSheet from '../profile/ProfileSheet';
 import type { ExportSource } from '../../services/transferService';
@@ -65,9 +67,14 @@ export default function GroupPage({ match }: Props) {
   const profile = useAuthStore((s) => s.profile);
   const signOut = useAuthStore((s) => s.signOut);
   const level = useDocumentsStore((s) => s.levels[levelKey]);
+  const shared = useDocumentsStore((s) => (isRoot ? s.levels[SHARED_KEY] : undefined));
   const groupName = useDocumentsStore((s) =>
     isRoot ? undefined : s.groupNames[levelKey],
   );
+  // The group we are inside — needed to know whether it was shared with us
+  // (read-only: no adding, renaming, moving or deleting anything in it).
+  const [group, setGroup] = useState<VaultGroup | null>(null);
+  const readOnly = !isRoot && group?.access === 'reader';
   const { loadLevel, createGroup, renameGroup, deleteGroup, setGroupName } =
     useDocumentsStore();
 
@@ -77,6 +84,7 @@ export default function GroupPage({ match }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [moving, setMoving] = useState<VaultGroup | null>(null);
   const [exportSource, setExportSource] = useState<ExportSource | null>(null);
+  const [shareTarget, setShareTarget] = useState<{ id: string; name: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -110,22 +118,37 @@ export default function GroupPage({ match }: Props) {
   };
 
   const ensureLoaded = () => {
-    const l = useDocumentsStore.getState().levels[levelKey];
+    const { levels } = useDocumentsStore.getState();
+    const l = levels[levelKey];
     if (!l?.loaded && !l?.loading) void loadLevel(levelKey);
+    if (isRoot) {
+      const sh = levels[SHARED_KEY];
+      if (!sh?.loaded && !sh?.loading) void loadLevel(SHARED_KEY);
+    }
     loadAttention();
   };
 
   useEffect(ensureLoaded, [levelKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useIonViewWillEnter(ensureLoaded, [levelKey]);
 
-  // Header name for deep-linked groups not seen via their parent level yet.
+  // Fetch the group itself: header name for deep links, and whether it was
+  // shared with us (read-only mode).
   useEffect(() => {
-    if (isRoot || groupName) return;
+    setGroup(null);
+    if (isRoot) return;
+    let active = true;
     service
       .getGroup(levelKey)
-      .then((g) => g && setGroupName(levelKey, g.name))
+      .then((g) => {
+        if (!active || !g) return;
+        setGroup(g);
+        setGroupName(levelKey, g.name);
+      })
       .catch(() => undefined);
-  }, [isRoot, groupName, levelKey, setGroupName]);
+    return () => {
+      active = false;
+    };
+  }, [isRoot, levelKey, setGroupName]);
 
   // Global search across all groups.
   useEffect(() => {
@@ -148,9 +171,28 @@ export default function GroupPage({ match }: Props) {
 
   const handleRefresh = async (e: RefresherCustomEvent) => {
     loadAttention();
-    await loadLevel(levelKey);
+    await Promise.all([loadLevel(levelKey), isRoot ? loadLevel(SHARED_KEY) : null]);
     e.detail.complete();
   };
+
+  // One "share" entry point per group: live sharing with people, or a file export.
+  const openShareMenu = (g: VaultGroup) =>
+    presentActionSheet({
+      header: `Share “${g.name}”`,
+      buttons: [
+        {
+          text: 'Share with people…',
+          icon: peopleOutline,
+          handler: () => setShareTarget({ id: g.id, name: g.name }),
+        },
+        {
+          text: 'Export as file…',
+          icon: shareOutline,
+          handler: () => setExportSource({ kind: 'group', id: g.id, name: g.name }),
+        },
+        { text: 'Cancel', role: 'cancel' },
+      ],
+    });
 
   const handleSignOut = () => {
     signOut();
@@ -243,7 +285,9 @@ export default function GroupPage({ match }: Props) {
   const showSearch = results !== null;
   const groups = level?.groups ?? [];
   const docs = level?.documents ?? [];
-  const isEmpty = level?.loaded && groups.length === 0 && docs.length === 0;
+  const hasShared =
+    isRoot && !!shared && (shared.groups.length > 0 || shared.documents.length > 0);
+  const isEmpty = level?.loaded && groups.length === 0 && docs.length === 0 && !hasShared;
 
   return (
     <IonPage>
@@ -261,6 +305,11 @@ export default function GroupPage({ match }: Props) {
                   <IonIcon icon={shieldCheckmark} />
                 </span>
                 Your Documents
+              </span>
+            ) : readOnly ? (
+              <span className="group-title">
+                {groupName ?? 'Group'}
+                <small>Shared by {group?.ownerName ?? 'someone'}</small>
               </span>
             ) : (
               groupName ?? 'Group'
@@ -382,33 +431,37 @@ export default function GroupPage({ match }: Props) {
                     </span>
                     <span className="group-row__name">{group.name}</span>
                     <span className="group-row__actions">
-                      <button
-                        aria-label={`Rename ${group.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void promptRenameGroup(group);
-                        }}
-                      >
-                        <IonIcon icon={pencilOutline} />
-                      </button>
-                      <button
-                        aria-label={`Move ${group.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMoving(group);
-                        }}
-                      >
-                        <IonIcon icon={swapHorizontalOutline} />
-                      </button>
-                      <button
-                        aria-label={`Export ${group.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExportSource({ kind: 'group', id: group.id, name: group.name });
-                        }}
-                      >
-                        <IonIcon icon={shareOutline} />
-                      </button>
+                      {!readOnly && (
+                        <>
+                          <button
+                            aria-label={`Rename ${group.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void promptRenameGroup(group);
+                            }}
+                          >
+                            <IonIcon icon={pencilOutline} />
+                          </button>
+                          <button
+                            aria-label={`Move ${group.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMoving(group);
+                            }}
+                          >
+                            <IonIcon icon={swapHorizontalOutline} />
+                          </button>
+                          <button
+                            aria-label={`Share ${group.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openShareMenu(group);
+                            }}
+                          >
+                            <IonIcon icon={shareOutline} />
+                          </button>
+                        </>
+                      )}
                       <button
                         aria-label={`Open ${group.name} in Google Drive`}
                         onClick={(e) => {
@@ -418,16 +471,18 @@ export default function GroupPage({ match }: Props) {
                       >
                         <IonIcon icon={logoGoogle} />
                       </button>
-                      <button
-                        className="danger"
-                        aria-label={`Delete ${group.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void confirmDeleteGroup(group);
-                        }}
-                      >
-                        <IonIcon icon={trashOutline} />
-                      </button>
+                      {!readOnly && (
+                        <button
+                          className="danger"
+                          aria-label={`Delete ${group.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void confirmDeleteGroup(group);
+                          }}
+                        >
+                          <IonIcon icon={trashOutline} />
+                        </button>
+                      )}
                     </span>
                   </div>
                 ))}
@@ -442,24 +497,75 @@ export default function GroupPage({ match }: Props) {
               </div>
             )}
 
+            {hasShared && shared && (
+              <section className="shared">
+                <p className="shared__title">
+                  <IonIcon icon={peopleOutline} />
+                  Shared with me
+                </p>
+                {shared.groups.length > 0 && (
+                  <div className="group-list group-list--shared">
+                    {shared.groups.map((g) => (
+                      <div
+                        className="group-row"
+                        key={g.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => history.push(`/g/${g.id}`)}
+                        onKeyDown={(e) => e.key === 'Enter' && history.push(`/g/${g.id}`)}
+                      >
+                        <span className="group-row__icon group-row__icon--shared">
+                          <IonIcon icon={peopleOutline} />
+                        </span>
+                        <span className="group-row__name">
+                          {g.name}
+                          <small className="group-row__sub">Shared by {g.ownerName ?? 'someone'}</small>
+                        </span>
+                        <span className="group-row__actions">
+                          <button
+                            aria-label={`Open ${g.name} in Google Drive`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openInDrive(driveFolderUrl(g.id));
+                            }}
+                          >
+                            <IonIcon icon={logoGoogle} />
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {shared.documents.length > 0 && (
+                  <div className="docs-grid">
+                    {shared.documents.map((doc) => (
+                      <DocumentCard key={doc.id} doc={doc} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
             {isEmpty && !level?.error && (
               <div className="docs-center docs-empty">
                 <div className="docs-empty__badge">
                   <IonIcon icon={documentsOutline} />
                 </div>
                 <h2>Nothing here yet</h2>
-                <p>Tap + to add a document or create a group.</p>
+                <p>{readOnly ? 'The owner hasn’t added anything here.' : 'Tap + to add a document or create a group.'}</p>
               </div>
             )}
           </>
         )}
       </IonContent>
 
-      <IonFab slot="fixed" vertical="bottom" horizontal="end">
-        <IonFabButton onClick={openAdd}>
-          <IonIcon icon={add} />
-        </IonFabButton>
-      </IonFab>
+      {!readOnly && (
+        <IonFab slot="fixed" vertical="bottom" horizontal="end">
+          <IonFabButton onClick={openAdd}>
+            <IonIcon icon={add} />
+          </IonFabButton>
+        </IonFab>
+      )}
 
       <AddDocumentSheet
         isOpen={addOpen}
@@ -482,6 +588,12 @@ export default function GroupPage({ match }: Props) {
       />
 
       <ImportModal isOpen={importOpen} onDidDismiss={() => setImportOpen(false)} />
+
+      <SharePeopleSheet
+        isOpen={shareTarget !== null}
+        target={shareTarget}
+        onDidDismiss={() => setShareTarget(null)}
+      />
 
       <ProfileSheet
         isOpen={profileOpen}

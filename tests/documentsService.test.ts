@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDocumentsService, expiryInfo } from '../src/services/documentsService';
-import type { DriveClient, DriveFile } from '../src/services/driveClient';
+import type { DriveClient, DriveFile, DrivePermission } from '../src/services/driveClient';
 
 const FOLDER = 'application/vnd.google-apps.folder';
 
 /** Minimal in-memory Drive used to exercise the domain layer. */
 function fakeDrive() {
   const files = new Map<string, DriveFile>();
+  const permissions = new Map<string, DrivePermission[]>();
   let seq = 0;
   const id = () => `id-${++seq}`;
 
@@ -99,9 +100,34 @@ function fakeDrive() {
       // Cascade delete children (folder deletion).
       for (const [k, v] of files) if (v.parents?.[0] === fileId) files.delete(k);
     },
+    async listSharedWithMeFolders() {
+      return [...files.values()].filter((f) => f.mimeType === FOLDER && f.sharedWithMe);
+    },
+    async listPermissions(fileId) {
+      return permissions.get(fileId) ?? [];
+    },
+    async createReaderPermission(fileId, emailAddress) {
+      if (!files.has(fileId)) throw new Error('Drive POST … → 404 notFound');
+      if (emailAddress.endsWith('@nowhere.invalid')) {
+        throw new Error('Drive POST … → 400 {"error":{"message":"Invalid emailAddress"}}');
+      }
+      const p: DrivePermission = { id: id(), type: 'user', role: 'reader', emailAddress };
+      permissions.set(fileId, [...(permissions.get(fileId) ?? []), p]);
+      return p;
+    },
+    async deletePermission(fileId, permissionId) {
+      permissions.set(
+        fileId,
+        (permissions.get(fileId) ?? []).filter((p) => p.id !== permissionId),
+      );
+    },
+    async setCopyRequiresWriterPermission(fileId, value) {
+      const f = files.get(fileId);
+      if (f) f.copyRequiresWriterPermission = value;
+    },
   };
 
-  return { client, files };
+  return { client, files, permissions };
 }
 
 describe('documentsService', () => {
@@ -397,5 +423,114 @@ describe('documentsService', () => {
     await svc.deleteDocument(doc.id);
     expect(files.has(doc.id)).toBe(false);
     expect([...files.values()].some((f) => f.parents?.[0] === doc.id)).toBe(false);
+  });
+
+  describe('sharing with people', () => {
+    it('shares a folder read-only, lists people, and removes them', async () => {
+      const { client, permissions } = fakeDrive();
+      const svc = createDocumentsService(client);
+      const car = await svc.createGroup('Car');
+
+      const person = await svc.shareWith(car.id, '  Friend@Example.com ');
+      expect(person.email).toBe('friend@example.com');
+      expect(permissions.get(car.id)).toEqual([
+        expect.objectContaining({ role: 'reader', type: 'user', emailAddress: 'friend@example.com' }),
+      ]);
+
+      let state = await svc.getSharing(car.id);
+      expect(state).toEqual({ level: 'download', people: [person] });
+
+      await svc.unshare(car.id, person.permissionId);
+      state = await svc.getSharing(car.id);
+      expect(state.people).toEqual([]);
+    });
+
+    it('rejects malformed and unknown addresses with a friendly message', async () => {
+      const { client } = fakeDrive();
+      const svc = createDocumentsService(client);
+      const car = await svc.createGroup('Car');
+
+      await expect(svc.shareWith(car.id, 'not-an-email')).rejects.toThrow(/valid email/i);
+      await expect(svc.shareWith(car.id, 'x@nowhere.invalid')).rejects.toThrow(
+        /doesn't recognise x@nowhere.invalid/,
+      );
+    });
+
+    it('switches between view-only and view & download', async () => {
+      const { client, files } = fakeDrive();
+      const svc = createDocumentsService(client);
+      const car = await svc.createGroup('Car');
+
+      await svc.setShareLevel(car.id, 'view');
+      expect(files.get(car.id)?.copyRequiresWriterPermission).toBe(true);
+      expect((await svc.getSharing(car.id)).level).toBe('view');
+
+      await svc.setShareLevel(car.id, 'download');
+      expect(files.get(car.id)?.copyRequiresWriterPermission).toBe(false);
+      expect((await svc.getSharing(car.id)).level).toBe('download');
+    });
+
+    it('cascades "view only" to everything inside, and to pages added later', async () => {
+      const { client, files } = fakeDrive();
+      const svc = createDocumentsService(client);
+      const car = await svc.createGroup('Car');
+      const rc = await svc.createDocument('RC', [{ label: 'Front', filename: 'f.jpg', blob: new Blob(['1']) }], car.id);
+
+      await svc.setShareLevel(car.id, 'view');
+      expect(files.get(car.id)?.copyRequiresWriterPermission).toBe(true);
+      expect(files.get(rc.id)?.copyRequiresWriterPermission).toBe(true);
+      expect(files.get(rc.parts[0].id)?.copyRequiresWriterPermission).toBe(true);
+
+      const back = await svc.addPart(rc.id, { label: 'Back', filename: 'b.jpg', blob: new Blob(['2']) });
+      expect(files.get(back.id)?.copyRequiresWriterPermission).toBe(true);
+      const ins = await svc.createDocument('Insurance', [{ label: 'Policy', filename: 'p.pdf', blob: new Blob(['3']) }], car.id);
+      expect(files.get(ins.id)?.copyRequiresWriterPermission).toBe(true);
+      expect(files.get(ins.parts[0].id)?.copyRequiresWriterPermission).toBe(true);
+
+      await svc.setShareLevel(car.id, 'download');
+      expect(files.get(rc.parts[0].id)?.copyRequiresWriterPermission).toBe(false);
+      expect(files.get(ins.parts[0].id)?.copyRequiresWriterPermission).toBe(false);
+    });
+
+    it('lists folders shared with me as read-only groups and documents', async () => {
+      const { client, files } = fakeDrive();
+      const svc = createDocumentsService(client);
+      // Simulate what another user's app created and shared with us.
+      const owner = { displayName: 'Anita', emailAddress: 'anita@example.com' };
+      const group = await client.createFolder('Car', 'their-root', { kind: 'group' });
+      Object.assign(files.get(group.id)!, { ownedByMe: false, sharedWithMe: true, owners: [owner] });
+      const doc = await client.createFolder('Passport', 'their-root', { kind: 'doc', title: 'Passport', createdAt: '2026-01-01' });
+      Object.assign(files.get(doc.id)!, {
+        ownedByMe: false,
+        sharedWithMe: true,
+        owners: [owner],
+        capabilities: { canEdit: false, canDownload: false },
+      });
+      await client.uploadFile(doc.id, 'p.jpg', new Blob(['1']), { label: 'Photo' });
+      // A folder we own is never listed here.
+      await svc.createGroup('Mine');
+
+      const level = await svc.listSharedWithMe();
+
+      expect(level.groups).toEqual([
+        expect.objectContaining({ id: group.id, name: 'Car', access: 'reader', ownerName: 'Anita', canDownload: true, sharedDirectly: true }),
+      ]);
+      expect(level.documents).toEqual([
+        expect.objectContaining({ id: doc.id, title: 'Passport', access: 'reader', ownerEmail: 'anita@example.com', canDownload: false, sharedDirectly: true }),
+      ]);
+      expect(level.documents[0].parts).toHaveLength(1);
+    });
+
+    it('marks our own items as owner with downloads allowed', async () => {
+      const { client } = fakeDrive();
+      const svc = createDocumentsService(client);
+      const car = await svc.createGroup('Car');
+      const doc = await svc.createDocument('RC', [{ label: 'Front', filename: 'f.jpg', blob: new Blob(['1']) }], car.id);
+
+      expect(car).toMatchObject({ access: 'owner', canDownload: true, sharedDirectly: false });
+      expect(doc).toMatchObject({ access: 'owner', canDownload: true, sharedDirectly: false });
+      const fresh = await svc.getGroup(car.id);
+      expect(fresh?.access).toBe('owner');
+    });
   });
 });

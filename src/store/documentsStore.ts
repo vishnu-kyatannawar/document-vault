@@ -5,6 +5,8 @@ import { logger } from '../services/logger';
 
 /** Level key for the vault root (other levels are keyed by group id). */
 export const ROOT_KEY = 'root';
+/** Level key for items other people shared with us (read-only). */
+export const SHARED_KEY = '__shared__';
 
 const toParentId = (key: string): string | undefined =>
   key === ROOT_KEY ? undefined : key;
@@ -61,7 +63,10 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => {
     loadLevel: async (key) => {
       patchLevel(key, { loading: true, error: null });
       try {
-        const level = await service.listLevel(toParentId(key));
+        const level =
+          key === SHARED_KEY
+            ? await service.listSharedWithMe()
+            : await service.listLevel(toParentId(key));
         const names = Object.fromEntries(level.groups.map((g) => [g.id, g.name]));
         set((s) => ({ groupNames: { ...s.groupNames, ...names } }));
         patchLevel(key, {

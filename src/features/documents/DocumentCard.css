@@ -104,3 +104,10 @@
 .doc-card--expired .doc-card__body h3 {
   color: var(--ion-color-danger);
 }
+
+/* Shared-with-me marker (top-left; page-count badge stays top-right) */
+.doc-card__badge--shared {
+  right: auto;
+  left: 8px;
+  background: rgba(63, 111, 92, 0.75);
+}

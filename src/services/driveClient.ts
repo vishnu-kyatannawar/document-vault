@@ -18,6 +18,22 @@ export interface DriveFile {
   description?: string;
   appProperties?: Record<string, string>;
   parents?: string[];
+  /** False for items another user shared with us. */
+  ownedByMe?: boolean;
+  /** True on the item that was directly shared with us (not its descendants). */
+  sharedWithMe?: boolean;
+  owners?: Array<{ displayName?: string; emailAddress?: string }>;
+  capabilities?: { canEdit?: boolean; canDownload?: boolean; canShare?: boolean };
+  /** Owner setting: readers may not download/copy/print (blocks alt=media too). */
+  copyRequiresWriterPermission?: boolean;
+}
+
+export interface DrivePermission {
+  id: string;
+  type: 'user' | 'group' | 'domain' | 'anyone';
+  role: 'owner' | 'organizer' | 'fileOrganizer' | 'writer' | 'commenter' | 'reader';
+  emailAddress?: string;
+  displayName?: string;
 }
 
 export interface DriveClient {
@@ -57,6 +73,14 @@ export interface DriveClient {
   updateAppProperties(id: string, appProperties: Record<string, string>): Promise<void>;
   downloadFile(id: string): Promise<Blob>;
   deleteFile(id: string): Promise<void>;
+  /** Folders other users shared directly with us. */
+  listSharedWithMeFolders(): Promise<DriveFile[]>;
+  listPermissions(id: string): Promise<DrivePermission[]>;
+  /** Grant read access to a Google account; Google emails them a notification. */
+  createReaderPermission(id: string, emailAddress: string): Promise<DrivePermission>;
+  deletePermission(id: string, permissionId: string): Promise<void>;
+  /** true = readers may only view in Drive (no download/copy/print). */
+  setCopyRequiresWriterPermission(id: string, value: boolean): Promise<void>;
 }
 
 export function createDriveClient(
@@ -84,8 +108,12 @@ export function createDriveClient(
     return res;
   }
 
+  const SHARE_FIELDS =
+    'ownedByMe,sharedWithMe,owners(displayName,emailAddress),capabilities(canEdit,canDownload),copyRequiresWriterPermission';
   const FIELDS =
-    'files(id,name,mimeType,thumbnailLink,createdTime,description,appProperties,parents)';
+    'files(id,name,mimeType,thumbnailLink,createdTime,description,appProperties,parents,' +
+    SHARE_FIELDS +
+    ')';
 
   async function query(q: string): Promise<DriveFile[]> {
     const params = new URLSearchParams({
@@ -106,7 +134,7 @@ export function createDriveClient(
     async getFile(id) {
       try {
         const res = await authed(
-          `${API}/files/${id}?fields=id,name,mimeType,trashed,createdTime,description,appProperties,parents`,
+          `${API}/files/${id}?fields=id,name,mimeType,trashed,createdTime,description,appProperties,parents,${SHARE_FIELDS}`,
         );
         return (await res.json()) as DriveFile;
       } catch (e) {
@@ -217,6 +245,42 @@ export function createDriveClient(
 
     async deleteFile(id) {
       await authed(`${API}/files/${id}`, { method: 'DELETE' });
+    },
+
+    listSharedWithMeFolders() {
+      return query(`sharedWithMe=true and mimeType='${DRIVE_FOLDER_MIME}' and trashed=false`);
+    },
+
+    async listPermissions(id) {
+      const res = await authed(
+        `${API}/files/${id}/permissions?fields=permissions(id,type,role,emailAddress,displayName)&pageSize=100`,
+      );
+      const data = await res.json();
+      return (data.permissions ?? []) as DrivePermission[];
+    },
+
+    async createReaderPermission(id, emailAddress) {
+      const res = await authed(
+        `${API}/files/${id}/permissions?sendNotificationEmail=true&fields=id,type,role,emailAddress,displayName`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'reader', type: 'user', emailAddress }),
+        },
+      );
+      return (await res.json()) as DrivePermission;
+    },
+
+    async deletePermission(id, permissionId) {
+      await authed(`${API}/files/${id}/permissions/${permissionId}`, { method: 'DELETE' });
+    },
+
+    async setCopyRequiresWriterPermission(id, value) {
+      await authed(`${API}/files/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ copyRequiresWriterPermission: value }),
+      });
     },
   };
 }

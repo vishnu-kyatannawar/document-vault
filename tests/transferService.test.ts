@@ -21,6 +21,7 @@ beforeAll(async () => {
 });
 
 const ROOT = 'fake-root';
+const OWNED = { access: 'owner' as const, canDownload: true, sharedDirectly: false };
 
 /**
  * Minimal in-memory DocumentsService: just enough tree + blob storage for the
@@ -57,7 +58,7 @@ function fakeVault() {
       return groups.get(gid) ?? null;
     },
     async createGroup(name: string, parentId?: string) {
-      const g: VaultGroup = { id: id(), name, parentId: parentId ?? ROOT };
+      const g: VaultGroup = { id: id(), name, parentId: parentId ?? ROOT, ...OWNED };
       groups.set(g.id, g);
       return g;
     },
@@ -71,6 +72,7 @@ function fakeVault() {
         remindDays: meta?.remindDays,
         notes: meta?.notes,
         parentId: parentId ?? ROOT,
+        ...OWNED,
         parts: parts.map((p) => {
           const pid = id();
           blobs.set(pid, p.blob);
@@ -111,6 +113,17 @@ function fakeVault() {
     async searchDocuments() {
       return [];
     },
+    async listSharedWithMe() {
+      return { groups: [], documents: [] };
+    },
+    async getSharing(): Promise<never> {
+      throw new Error('unused');
+    },
+    async shareWith(): Promise<never> {
+      throw new Error('unused');
+    },
+    async unshare() {},
+    async setShareLevel() {},
   } satisfies DocumentsService;
 
   return { svc, groups, docs, blobs, createDocCalls };

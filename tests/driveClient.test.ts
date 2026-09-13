@@ -99,4 +99,68 @@ describe('driveClient', () => {
     const client = createDriveClient(getToken);
     expect(await client.getFile('missing-id')).toBeNull();
   });
+
+  describe('sharing', () => {
+    it('requests ownership/capability fields so shared items can be recognised', async () => {
+      const fetchMock = mockFetch({ files: [] });
+      const client = createDriveClient(getToken);
+      await client.listFolders('root-id');
+      const url = decodeURIComponent(fetchMock.mock.calls[0][0] as string);
+      expect(url).toContain('ownedByMe');
+      expect(url).toContain('sharedWithMe');
+      expect(url).toContain('capabilities(canEdit,canDownload)');
+      expect(url).toContain('copyRequiresWriterPermission');
+    });
+
+    it('lists folders shared with me', async () => {
+      const fetchMock = mockFetch({ files: [{ id: 'g1', name: 'Car' }] });
+      const client = createDriveClient(getToken);
+      const files = await client.listSharedWithMeFolders();
+      const url = decodeURIComponent(fetchMock.mock.calls[0][0] as string);
+      expect(url).toContain('sharedWithMe=true');
+      expect(url).toContain("mimeType='application/vnd.google-apps.folder'");
+      expect(files[0].id).toBe('g1');
+    });
+
+    it('creates a reader permission for a user and notifies them', async () => {
+      const fetchMock = mockFetch({ id: 'p1', type: 'user', role: 'reader', emailAddress: 'a@b.com' });
+      const client = createDriveClient(getToken);
+      const p = await client.createReaderPermission('f1', 'a@b.com');
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toContain('/files/f1/permissions');
+      expect(url).toContain('sendNotificationEmail=true');
+      expect((init as RequestInit).method).toBe('POST');
+      expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+        role: 'reader',
+        type: 'user',
+        emailAddress: 'a@b.com',
+      });
+      expect(p.id).toBe('p1');
+    });
+
+    it('lists and deletes permissions', async () => {
+      const fetchMock = mockFetch({ permissions: [{ id: 'p1', type: 'user', role: 'reader' }] });
+      const client = createDriveClient(getToken);
+      const list = await client.listPermissions('f1');
+      expect(list).toHaveLength(1);
+      expect(fetchMock.mock.calls[0][0]).toContain('/files/f1/permissions?');
+
+      await client.deletePermission('f1', 'p1');
+      const [url, init] = fetchMock.mock.calls[1];
+      expect(url).toContain('/files/f1/permissions/p1');
+      expect((init as RequestInit).method).toBe('DELETE');
+    });
+
+    it('toggles the view-only (no download) restriction', async () => {
+      const fetchMock = mockFetch({});
+      const client = createDriveClient(getToken);
+      await client.setCopyRequiresWriterPermission('f1', true);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toContain('/files/f1');
+      expect((init as RequestInit).method).toBe('PATCH');
+      expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+        copyRequiresWriterPermission: true,
+      });
+    });
+  });
 });

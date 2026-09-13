@@ -24,6 +24,7 @@ import {
   folderOpenOutline,
   imagesOutline,
   logoGoogle,
+  peopleOutline,
   shareOutline,
   shareSocialOutline,
   swapHorizontalOutline,
@@ -46,6 +47,7 @@ import { logger } from '../../services/logger';
 import PartViewer from './PartViewer';
 import MoveTargetModal from './MoveTargetModal';
 import ExportSheet from '../transfer/ExportSheet';
+import SharePeopleSheet from '../share/SharePeopleSheet';
 import './DocumentDetailPage.css';
 
 type Props = RouteComponentProps<{ id: string }>;
@@ -70,6 +72,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
   const [moveFromKey, setMoveFromKey] = useState(ROOT_KEY);
   const [editOpen, setEditOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [presentActionSheet] = useIonActionSheet();
   const [presentAlert] = useIonAlert();
   const [presentToast] = useIonToast();
@@ -98,7 +101,7 @@ export default function DocumentDetailPage({ match, history }: Props) {
   };
 
   const parentRoute = async (): Promise<string> => {
-    if (!doc) return '/documents';
+    if (!doc || doc.sharedDirectly) return '/documents';
     const rootId = await service.ensureRoot();
     return doc.parentId === rootId ? '/documents' : `/g/${doc.parentId}`;
   };
@@ -133,6 +136,8 @@ export default function DocumentDetailPage({ match, history }: Props) {
 
   const safeActive = Math.min(active, Math.max(0, doc.parts.length - 1));
   const part: DocumentPart | undefined = doc.parts[safeActive];
+  // Shared with us: look, download (if allowed), never change anything.
+  const readOnly = doc.access === 'reader';
 
   const info = expiryInfo(doc);
   const expiryLabel = (() => {
@@ -274,6 +279,16 @@ export default function DocumentDetailPage({ match, history }: Props) {
       ],
     });
 
+  const openShareMenu = () =>
+    presentActionSheet({
+      header: `Share “${doc.title}”`,
+      buttons: [
+        { text: 'Share with people…', icon: peopleOutline, handler: () => setShareOpen(true) },
+        { text: 'Export as file…', icon: shareOutline, handler: () => setExportOpen(true) },
+        { text: 'Cancel', role: 'cancel' },
+      ],
+    });
+
   const openMove = async () => {
     const rootId = await service.ensureRoot();
     setMoveFromKey(doc.parentId === rootId ? ROOT_KEY : doc.parentId);
@@ -339,12 +354,16 @@ export default function DocumentDetailPage({ match, history }: Props) {
             <IonButton onClick={openInGoogleDrive} aria-label="Open in Google Drive">
               <IonIcon slot="icon-only" icon={logoGoogle} />
             </IonButton>
-            <IonButton onClick={openAddPart} aria-label="Add page">
-              <IonIcon slot="icon-only" icon={addOutline} />
-            </IonButton>
-            <IonButton onClick={() => setEditOpen(true)} aria-label="Edit details">
-              <IonIcon slot="icon-only" icon={createOutline} />
-            </IonButton>
+            {!readOnly && (
+              <>
+                <IonButton onClick={openAddPart} aria-label="Add page">
+                  <IonIcon slot="icon-only" icon={addOutline} />
+                </IonButton>
+                <IonButton onClick={() => setEditOpen(true)} aria-label="Edit details">
+                  <IonIcon slot="icon-only" icon={createOutline} />
+                </IonButton>
+              </>
+            )}
           </IonButtons>
         </IonToolbar>
       </IonHeader>
@@ -353,8 +372,14 @@ export default function DocumentDetailPage({ match, history }: Props) {
           header, hiding the part tabs and meta chips. */}
       <IonContent scrollY={false} className="detail">
         <div className="detail__layout">
-          {(expiryLabel || doc.notes) && (
+          {(expiryLabel || doc.notes || readOnly) && (
             <div className="detail__meta">
+              {readOnly && (
+                <span className="detail__chip detail__chip--shared">
+                  <IonIcon icon={peopleOutline} />
+                  Shared by {doc.ownerName ?? 'someone'}
+                </span>
+              )}
               {expiryLabel && info && (
                 <span className={`detail__chip detail__chip--${info.state}`}>
                   <IonIcon icon={timeOutline} />
@@ -373,10 +398,12 @@ export default function DocumentDetailPage({ match, history }: Props) {
           {doc.parts.length === 0 && (
             <div className="detail__none">
               <p>This document has no pages.</p>
-              <IonButton onClick={openAddPart}>
-                <IonIcon slot="start" icon={addOutline} />
-                Add a page
-              </IonButton>
+              {!readOnly && (
+                <IonButton onClick={openAddPart}>
+                  <IonIcon slot="start" icon={addOutline} />
+                  Add a page
+                </IonButton>
+              )}
             </div>
           )}
 
@@ -387,17 +414,30 @@ export default function DocumentDetailPage({ match, history }: Props) {
                   key={p.id}
                   className={`detail__tab ${i === safeActive ? 'active' : ''}`}
                   // Tap the current page's pill again to rename it.
-                  onClick={() => (i === safeActive ? void promptRenamePage(p) : setActive(i))}
+                  onClick={() =>
+                    i === safeActive ? !readOnly && void promptRenamePage(p) : setActive(i)
+                  }
                 >
                   {p.label}
-                  {i === safeActive && <IonIcon icon={createOutline} />}
+                  {i === safeActive && !readOnly && <IonIcon icon={createOutline} />}
                 </button>
               ))}
             </div>
           )}
 
           <div className="detail__stage">
-            {part && (
+            {part && !doc.canDownload && (
+              <div className="detail__locked">
+                <IonIcon icon={logoGoogle} />
+                <p>
+                  Preview not available — the owner allows viewing in Google Drive only.
+                </p>
+                <IonButton onClick={() => openInDrive(driveFileUrl(part.id))}>
+                  Open in Google Drive
+                </IonButton>
+              </div>
+            )}
+            {part && doc.canDownload && (
               <PartViewer
                 key={part.id}
                 part={part}
@@ -415,29 +455,56 @@ export default function DocumentDetailPage({ match, history }: Props) {
       </IonContent>
 
       <IonToolbar className="detail__actions">
-        <div className="detail__actionbar detail__actionbar--five">
-          <button onClick={onDownload} disabled={busy || !part}>
-            <IonIcon icon={downloadOutline} />
-            <span>Download</span>
-          </button>
-          <button onClick={onShare} disabled={busy || !part}>
-            <IonIcon icon={shareSocialOutline} />
-            <span>Share</span>
-          </button>
-          <button onClick={() => void openMove()} disabled={busy}>
-            <IonIcon icon={swapHorizontalOutline} />
-            <span>Move</span>
-          </button>
-          <button onClick={() => setExportOpen(true)} disabled={busy}>
-            <IonIcon icon={shareOutline} />
-            <span>Export</span>
-          </button>
-          <button className="danger" onClick={onDelete} disabled={busy}>
-            <IonIcon icon={trashOutline} />
-            <span>Delete</span>
-          </button>
-        </div>
+        {readOnly ? (
+          <div className="detail__actionbar">
+            {doc.canDownload ? (
+              <>
+                <button onClick={onDownload} disabled={busy || !part}>
+                  <IonIcon icon={downloadOutline} />
+                  <span>Download</span>
+                </button>
+                <button onClick={onShare} disabled={busy || !part}>
+                  <IonIcon icon={shareSocialOutline} />
+                  <span>Share</span>
+                </button>
+              </>
+            ) : null}
+            <button onClick={openInGoogleDrive}>
+              <IonIcon icon={logoGoogle} />
+              <span>Open in Drive</span>
+            </button>
+          </div>
+        ) : (
+          <div className="detail__actionbar detail__actionbar--five">
+            <button onClick={onDownload} disabled={busy || !part}>
+              <IonIcon icon={downloadOutline} />
+              <span>Download</span>
+            </button>
+            <button onClick={onShare} disabled={busy || !part}>
+              <IonIcon icon={shareSocialOutline} />
+              <span>Share</span>
+            </button>
+            <button onClick={() => void openMove()} disabled={busy}>
+              <IonIcon icon={swapHorizontalOutline} />
+              <span>Move</span>
+            </button>
+            <button onClick={openShareMenu} disabled={busy}>
+              <IonIcon icon={peopleOutline} />
+              <span>People</span>
+            </button>
+            <button className="danger" onClick={onDelete} disabled={busy}>
+              <IonIcon icon={trashOutline} />
+              <span>Delete</span>
+            </button>
+          </div>
+        )}
       </IonToolbar>
+
+      <SharePeopleSheet
+        isOpen={shareOpen}
+        target={shareOpen ? { id: doc.id, name: doc.title } : null}
+        onDidDismiss={() => setShareOpen(false)}
+      />
 
       <EditDetailsModal
         isOpen={editOpen}
