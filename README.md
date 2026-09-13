@@ -97,6 +97,11 @@ You must create your own OAuth Client ID (free). It takes ~5 minutes.
      into `index.html`'s `<head>`) or the *HTML file* method (drop the file in
      `public/`), then redeploy. This deployment already carries its owner's tag
      in `index.html` and the public pages — a fork must replace it with its own.
+     Brand verification checks ownership of the **site root**, not just the
+     app's path: for a `<user>.github.io` site that means the `<user>.github.io`
+     repository must exist and its `index.html` must carry the same tag, with a
+     second URL-prefix property `https://<user>.github.io/` verified in Search
+     Console.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Web application**.
    - **Authorized JavaScript origins**:
