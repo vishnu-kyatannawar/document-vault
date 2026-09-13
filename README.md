@@ -95,7 +95,8 @@ You must create your own OAuth Client ID (free). It takes ~5 minutes.
      `https://vishnu-kyatannawar.github.io/document-vault/` and verify with the
      *HTML tag* method (paste the `<meta name="google-site-verification">` tag
      into `index.html`'s `<head>`) or the *HTML file* method (drop the file in
-     `public/`), then redeploy.
+     `public/`), then redeploy. This deployment already carries its owner's tag
+     in `index.html` and the public pages — a fork must replace it with its own.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Web application**.
    - **Authorized JavaScript origins**:
