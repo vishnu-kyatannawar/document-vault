@@ -53,7 +53,11 @@ export default defineConfig({
         navigateFallback: `${BASE}index.html`,
         // Never cache Drive API / userinfo responses — always hit network.
         // (Sign-in is a top-level navigation to Google, which the SW never sees.)
-        navigateFallbackDenylist: [/^\/document-vault\/api/],
+        navigateFallbackDenylist: [
+          /^\/document-vault\/api/,
+          // Public static pages (OAuth branding: home / privacy / terms).
+          /^\/document-vault\/(about|privacy|terms)\.html$/,
+        ],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/(www|content)\.googleapis\.com\/.*/,

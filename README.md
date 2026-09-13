@@ -76,6 +76,26 @@ You must create your own OAuth Client ID (free). It takes ~5 minutes.
      required for **Share with people**: anyone you share with signs into this
      app with their own Google account, and in *Testing* mode that is blocked
      unless each of them is listed under **Test users**.
+   - **Branding** (Google Auth Platform → Branding) — required to publish:
+     | Field | Value |
+     | --- | --- |
+     | App name | `Document Vault` |
+     | Application home page | `https://vishnu-kyatannawar.github.io/document-vault/about.html` |
+     | Application privacy policy link | `https://vishnu-kyatannawar.github.io/document-vault/privacy.html` |
+     | Application terms of service link | `https://vishnu-kyatannawar.github.io/document-vault/terms.html` |
+     | Authorized domain | `vishnu-kyatannawar.github.io` |
+     | App logo (optional) | download `https://vishnu-kyatannawar.github.io/document-vault/icons/icon-512.png` and upload it |
+
+     These pages live in [public/](public/) and are deployed with the app.
+     Uploading a **logo** makes Google's *brand verification* mandatory; without
+     a logo, an app that only uses non-sensitive scopes (`drive.file`) can be
+     published straight away. Brand verification also needs the authorized
+     domain verified in [Google Search Console](https://search.google.com/search-console):
+     add a **URL-prefix** property for
+     `https://vishnu-kyatannawar.github.io/document-vault/` and verify with the
+     *HTML tag* method (paste the `<meta name="google-site-verification">` tag
+     into `index.html`'s `<head>`) or the *HTML file* method (drop the file in
+     `public/`), then redeploy.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Web application**.
    - **Authorized JavaScript origins**:

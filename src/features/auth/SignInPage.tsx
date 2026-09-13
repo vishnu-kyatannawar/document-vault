@@ -61,6 +61,11 @@ export default function SignInPage() {
             You’ll be taken to Google and brought straight back. We only request
             access to files this app creates in your Drive.
           </p>
+          <nav className="signin__links" aria-label="About this app">
+            <a href="about.html">About</a>
+            <a href="privacy.html">Privacy</a>
+            <a href="terms.html">Terms</a>
+          </nav>
         </div>
       </IonContent>
     </IonPage>

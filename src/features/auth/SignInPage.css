@@ -91,3 +91,15 @@
   color: var(--ion-color-step-400);
   margin: -6px 0 0;
 }
+
+.signin__links {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: -14px;
+  font-size: 12.5px;
+}
+.signin__links a {
+  color: var(--ion-color-step-500);
+  text-decoration: none;
+}
